@@ -188,7 +188,9 @@ export default {
     const ep = resolveEndpoint(entry);
     if (!ep) throw new Error(`workday: cannot derive CXS endpoint for ${entry.name}`);
 
-    const postOpts = { method: 'POST', redirect: 'error', headers: { 'content-type': 'application/json', accept: 'application/json' } };
+    // accept-language is required by some tenants (e.g. Truist): without it,
+    // CXS locale resolution fails and the endpoint returns HTTP 500.
+    const postOpts = { method: 'POST', redirect: 'error', headers: { 'content-type': 'application/json', accept: 'application/json', 'accept-language': 'en-US' } };
     const makeBody = (offset) => JSON.stringify({ limit: PAGE_SIZE, offset, searchText: '', appliedFacets: {} });
     const sinceMs = typeof ctx?.sinceMs === 'number' ? ctx.sinceMs : null;
 
