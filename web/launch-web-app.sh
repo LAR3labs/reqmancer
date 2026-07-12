@@ -13,8 +13,13 @@ cd "$WEB_DIR" || exit 1
 
 STARTED_BY_US=0
 if ! curl -s -o /dev/null --max-time 2 "$URL"; then
+  # Job control on: the background server becomes its own process-group
+  # leader, so cleanup can kill exactly its tree (next + children) and
+  # nothing else — no pkill pattern matching.
+  set -m
   ./node_modules/.bin/next dev > /tmp/career-ops-web.log 2>&1 &
   SERVER_PID=$!
+  set +m
   STARTED_BY_US=1
   for i in $(seq 1 45); do
     sleep 2
@@ -26,10 +31,9 @@ if [ -x "$CHROME" ]; then
   # Blocks until the app window is closed
   "$CHROME" --app="$URL" --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check > /dev/null 2>&1
   if [ "$STARTED_BY_US" = "1" ]; then
-    kill "$SERVER_PID" 2>/dev/null
-    # Match the dev server by its actual path (portable — no hardcoded
-    # parent-directory name), and only ours, not other next dev servers.
-    pkill -f "$WEB_DIR/node_modules/.bin/next" 2>/dev/null
+    # Kill the whole process group we started (negative PID = PGID thanks
+    # to set -m above); fall back to the single PID if that fails.
+    kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null
   fi
 else
   # No Chrome: plain browser tab; server keeps running (no way to detect close)
