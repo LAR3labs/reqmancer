@@ -1,5 +1,6 @@
 import { pipelineSummary, doctorState } from "@/lib/career-ops";
 import { OnboardingBanner } from "@/components/onboarding-banner";
+import { UpdateBanner } from "@/components/update-banner";
 import { FirstRunHome } from "@/components/home/first-run-home";
 import { TodayDashboard } from "@/components/home/today-dashboard";
 
@@ -17,7 +18,12 @@ export default function Home() {
   // portals-missing user is nudged rather than told "all caught up".
   return (
     <>
-      {onboardingNeeded && <OnboardingBanner />}
+      {/* Align banners with the dashboard's content column (same max-w/px) and
+          give them top breathing room, instead of hugging the main's top-left. */}
+      <div className="mx-auto max-w-5xl px-6 pt-8">
+        {onboardingNeeded && <OnboardingBanner />}
+        <UpdateBanner />
+      </div>
       <TodayDashboard applications={applications} inbox={inbox} inBetween={phase === "in-between"} />
     </>
   );
