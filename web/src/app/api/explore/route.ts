@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import fs from "node:fs";
-import { runDiscovery } from "@/lib/core/scan";
+import { runDiscovery, runPortalScan } from "@/lib/core/scan";
 import { rootScript } from "@/lib/career-ops";
 import { parseExplorePatch, DEFAULT_FILTERS, type DiscoveredOffer, type ScanEvent } from "@/lib/explore";
 
@@ -38,10 +38,33 @@ export async function POST(req: NextRequest) {
           /* stream closed */
         }
       };
-      send({ kind: "start", ats: filters.ats, sinceDays: filters.sinceDays, limit: filters.limitPerAts, free: true } satisfies ScanEvent);
+      send({
+        kind: "start",
+        ats: filters.includePortals ? [...filters.ats, "portals"] : filters.ats,
+        sinceDays: filters.sinceDays,
+        limit: filters.limitPerAts,
+        free: true,
+      } satisfies ScanEvent);
+      // Both engines are zero-token HTTP scanners; run them in parallel and
+      // merge (dedup by URL — a portals.yml company can also be in an ATS
+      // dataset). Each engine dedups internally, so cross-engine dupes are
+      // filtered here, at the shared stream, before the client sees them.
+      const seen = new Set<string>();
+      const sendDeduped = (e: ScanEvent) => {
+        if (e.kind === "offer") {
+          if (seen.has(e.offer.url)) return;
+          seen.add(e.offer.url);
+        }
+        send(e);
+      };
       let offers: DiscoveredOffer[] = [];
       try {
-        offers = await runDiscovery(filters, (e: ScanEvent) => send(e));
+        const [atsOffers, portalOffers] = await Promise.all([
+          filters.ats.length ? runDiscovery(filters, sendDeduped) : Promise.resolve([]),
+          filters.includePortals ? runPortalScan(filters, sendDeduped) : Promise.resolve([]),
+        ]);
+        const merged = new Set(atsOffers.map((o) => o.url));
+        offers = [...atsOffers, ...portalOffers.filter((o) => !merged.has(o.url))];
       } catch (err) {
         send({ kind: "error", message: err instanceof Error ? err.message : "discovery failed" } satisfies ScanEvent);
       }

@@ -110,3 +110,17 @@ export function seedExploreFilters(): { filters: ExploreFilters; seededFrom: str
 }
 
 export { listFrom as normalizeKeywords };
+
+/** What "My portals" actually covers — the enabled job boards (by name) and the
+ *  count of enabled tracked companies in the user's portals.yml. Rendered under
+ *  the Sources chips so the data's origin is never a mystery. Best-effort: a
+ *  bare checkout yields empty. */
+export function portalSourceSummary(): { boards: string[]; companies: number } {
+  const portals = loadYaml("portals.yml");
+  const enabled = (v: unknown): Array<Record<string, unknown>> =>
+    Array.isArray(v) ? v.filter((e): e is Record<string, unknown> => !!e && typeof e === "object" && (e as Record<string, unknown>).enabled !== false) : [];
+  const boards = enabled(portals?.job_boards)
+    .map((b) => String(b.name ?? b.provider ?? "").trim())
+    .filter(Boolean);
+  return { boards: Array.from(new Set(boards)), companies: enabled(portals?.tracked_companies).length };
+}

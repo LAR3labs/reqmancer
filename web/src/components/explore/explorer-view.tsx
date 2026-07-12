@@ -31,11 +31,13 @@ export function ExplorerView({
   inboxSnapshot,
   appsSnapshot,
   rootExists,
+  portalSources,
 }: {
   seed: { filters: ExploreFilters; seededFrom: string[] };
   inboxSnapshot: InboxJob[];
   appsSnapshot: Application[];
   rootExists: boolean;
+  portalSources?: { boards: string[]; companies: number };
 }) {
   const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
@@ -97,7 +99,7 @@ export function ExplorerView({
   const isAi = mode === "ai";
   if (running) return isAi ? <AiHuntView cliName={cli.name} /> : <DiscoveringState />;
 
-  const canDiscover = filters.ats.length > 0;
+  const canDiscover = filters.ats.length > 0 || filters.includePortals;
   const isResults = phase === "results";
 
   return (
@@ -164,14 +166,14 @@ export function ExplorerView({
               </button>
               {refineOpen && (
                 <div className="space-y-4 border-t border-border p-4">
-                  <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
+                  <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} portalSources={portalSources} />
                   <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Re-cast (free)" />
                 </div>
               )}
             </div>
           ) : (
             <div className="mb-6 rounded-2xl border border-border bg-surface/30 p-5">
-              <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} />
+              <FilterBuilder filters={filters} onChange={setFilters} seededFrom={seed.seededFrom} portalSources={portalSources} />
               <div className="mt-5">
                 <DiscoverBar canDiscover={canDiscover} onDiscover={discover} label="Discover (free)" />
               </div>

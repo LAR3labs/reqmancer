@@ -28,6 +28,8 @@
  *   node scan.mjs --verify --headed-fallback  # retry anti-bot-blocked URLs in a headed browser (needs a display)
  *   node scan.mjs --verify --throttle          # jittered ~5-10s gap between checks (stay under rate limits)
  *   node scan.mjs --verify --throttle=8000     # custom base gap in ms (waits base..2*base)
+ *   node scan.mjs --json           # machine-readable: stdout = one JSON result object
+ *                                  # (schema portal-scan/v1), human progress → stderr
  */
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
@@ -45,7 +47,9 @@ import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 
 try {
   const { config } = await import('dotenv');
-  config();
+  // quiet: dotenv v17 prints an "injected env" banner to stdout, which would
+  // corrupt the single-object stdout contract of --json mode.
+  config({ quiet: true });
 } catch {
   // dotenv is optional — fall back to process.env if not installed
 }
@@ -935,6 +939,13 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
   const verify = args.includes('--verify');
+  // --json (mirrors scan-ats-full.mjs #1199): stdout is reserved for ONE
+  // machine-readable result object; every human line — progress, summary,
+  // errors — moves to stderr so callers can stream it as live progress.
+  // Redirecting console.log is the single-point retrofit for a main() that
+  // prints in ~40 places; process.stdout.write below bypasses the redirect.
+  const jsonMode = args.includes('--json');
+  if (jsonMode) console.log = (...a) => console.error(...a);
   // Opt-in: on an anti-bot challenge (e.g. pracuj.pl Cloudflare wall), retry the
   // URL in a headed browser. Off by default — headed Chromium needs a display, so
   // scheduled/unattended scans should not rely on it.
@@ -1376,6 +1387,40 @@ async function main() {
 
   console.log(`\n→ Run /career-ops pipeline to evaluate new offers.`);
   console.log('→ Share results and get help: https://discord.gg/8pRpHETxa4');
+
+  // --json: the ONE authoritative stdout object (human output went to stderr).
+  // Consumed by the web Explore route (runPortalScan) — keep field names stable.
+  if (jsonMode) {
+    process.stdout.write(JSON.stringify({
+      schema: 'portal-scan/v1',
+      date,
+      dryRun,
+      companiesScanned: summaryCompanies,
+      boardsScanned: summaryBoards,
+      totalFound,
+      filtered: {
+        title: totalFilteredTitle,
+        tier: totalFilteredTier,
+        location: totalFilteredLocation,
+        salary: totalFilteredSalary,
+        content: totalFilteredContent,
+        cooldown: totalFilteredCooldown,
+      },
+      dupes: totalDupes,
+      emptyTargets,
+      errors: errors.length,
+      offers: verifiedOffers.map(o => ({
+        url: o.url,
+        company: o.company,
+        title: o.title,
+        location: typeof o.location === 'string' ? o.location : '',
+        // providers report epoch ms (optional) → YYYY-MM-DD or "" like the ATS scanner
+        postedAt: Number.isFinite(o.postedAt) ? new Date(o.postedAt).toISOString().slice(0, 10) : '',
+        source: o.source,
+        trustScore: o.trustScore ?? null,
+      })),
+    }) + '\n');
+  }
 }
 
 // Only run main() when invoked directly (`node scan.mjs`), not when imported by tests.

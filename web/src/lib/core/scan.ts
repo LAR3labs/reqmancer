@@ -80,6 +80,124 @@ type ScanJson = {
   offers?: JsonOffer[];
 };
 
+// ── Portal scan (scan.mjs + the user's own portals.yml) ─────────────────────
+//
+// Same ACL discipline as runDiscovery: the REAL core scanner does the work, we
+// only spawn + parse. `--dry-run --json` (schema portal-scan/v1) writes NOTHING
+// and reserves stdout for one authoritative result object (human progress →
+// stderr, surfaced as log events). Filters come from the user's portals.yml —
+// this is deliberately "my portals, as configured", not the UI chips.
+
+export function portalScannerSupportsJson(): boolean {
+  try {
+    const src = fs.readFileSync(rootScript("scan"), "utf8");
+    return src.includes("portal-scan/v1");
+  } catch {
+    return false;
+  }
+}
+
+type PortalScanJson = {
+  schema?: string;
+  companiesScanned?: number;
+  boardsScanned?: number;
+  offers?: JsonOffer[];
+  errors?: number;
+};
+
+export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) => void): Promise<DiscoveredOffer[]> {
+  return new Promise((resolve) => {
+    if (!portalScannerSupportsJson()) {
+      onEvent({ kind: "log", line: "Portal scan skipped — this checkout's scan.mjs has no --json support." });
+      resolve([]);
+      return;
+    }
+    if (!fs.existsSync(`${careerOpsRoot()}/portals.yml`)) {
+      onEvent({ kind: "log", line: "Portal scan skipped — no portals.yml yet (run onboarding)." });
+      resolve([]);
+      return;
+    }
+    onEvent({ kind: "atsStart", ats: "portals", companies: 0 });
+
+    const child = spawn(process.execPath, [rootScript("scan"), "--dry-run", "--json"], {
+      cwd: careerOpsRoot(),
+      env: { ...process.env },
+    });
+
+    const offers: DiscoveredOffer[] = [];
+    const seen = new Set<string>();
+    let jsonOut = "";
+    let errBuf = "";
+    const killer = setTimeout(() => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        /* ignore */
+      }
+    }, 230_000);
+
+    child.stdout.on("data", (d: Buffer) => {
+      jsonOut += d.toString();
+    });
+    child.stderr.on("data", (d: Buffer) => {
+      errBuf += d.toString();
+      const parts = errBuf.split(/\r?\n/);
+      errBuf = parts.pop() ?? "";
+      for (const p of parts) if (p.trim()) onEvent({ kind: "log", line: p.trim() });
+    });
+
+    child.on("error", (e) => {
+      clearTimeout(killer);
+      onEvent({ kind: "error", message: e instanceof Error ? e.message : "portal scanner failed to start" });
+      resolve(offers);
+    });
+    child.on("close", () => {
+      clearTimeout(killer);
+      let j: PortalScanJson | null = null;
+      try {
+        j = JSON.parse(jsonOut.trim()) as PortalScanJson;
+      } catch {
+        j = null;
+      }
+      if (j?.schema === "portal-scan/v1" && Array.isArray(j.offers)) {
+        for (const o of j.offers) {
+          const url = (o.url || "").trim();
+          if (!url || seen.has(url) || !o.company || !o.title) continue;
+          seen.add(url);
+          const source = o.source || "portals";
+          const offer: DiscoveredOffer = {
+            company: o.company,
+            title: o.title,
+            location: o.location || "",
+            postedAt: o.postedAt || "",
+            ats: source.replace(/-api$/, ""),
+            source,
+            url,
+            matchedKeyword: firstMatch(o.title, filters.positive),
+          };
+          offers.push(offer);
+          onEvent({ kind: "offer", offer });
+        }
+        onEvent({ kind: "atsDone", ats: "portals", unreachable: j.errors ?? 0 });
+        // Portals-only run: no ATS engine will emit the summary, and without one
+        // the client reads companiesScanned=0 as "degraded" — supply it here.
+        // When the ATS engine also runs, ITS summary is authoritative (skip ours).
+        if (filters.ats.length === 0) {
+          onEvent({
+            kind: "summary",
+            companiesScanned: (j.companiesScanned ?? 0) + (j.boardsScanned ?? 0),
+            unreachable: j.errors ?? 0,
+            matches: offers.length,
+          });
+        }
+      } else {
+        onEvent({ kind: "error", message: "The portal scanner returned no readable output." });
+      }
+      resolve(offers);
+    });
+  });
+}
+
 export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) => void): Promise<DiscoveredOffer[]> {
   return new Promise((resolve) => {
     const tempPortals = writeTempPortals(filters);

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { ExplorerView } from "@/components/explore/explorer-view";
-import { seedExploreFilters } from "@/lib/core/portals";
+import { seedExploreFilters, portalSourceSummary } from "@/lib/core/portals";
 import { readInbox, readApplications, careerOpsRoot } from "@/lib/career-ops";
 import { DEFAULT_FILTERS } from "@/lib/explore";
 
@@ -21,7 +21,13 @@ export default function ExplorePage() {
   } catch {
     /* ignore */
   }
+  let portalSources: { boards: string[]; companies: number } = { boards: [], companies: 0 };
+  try {
+    portalSources = portalSourceSummary();
+  } catch {
+    /* bare checkout → empty */
+  }
   return (
-    <ExplorerView seed={seed} inboxSnapshot={readInbox()} appsSnapshot={readApplications()} rootExists={rootExists} />
+    <ExplorerView seed={seed} inboxSnapshot={readInbox()} appsSnapshot={readApplications()} rootExists={rootExists} portalSources={portalSources} />
   );
 }

@@ -25,6 +25,9 @@ export type ExploreFilters = {
   sinceDays: number;
   ats: AtsSource[];
   limitPerAts: number;
+  /** also run the user's own portal scan (scan.mjs + portals.yml, dry-run) and
+   *  merge its matches into the results — same zero-token contract. */
+  includePortals: boolean;
 };
 
 export const DEFAULT_FILTERS: ExploreFilters = {
@@ -36,6 +39,7 @@ export const DEFAULT_FILTERS: ExploreFilters = {
   sinceDays: 7,
   ats: [...ATS_SOURCES],
   limitPerAts: 150,
+  includePortals: true,
 };
 
 export type DiscoveredOffer = {
@@ -106,6 +110,10 @@ function clampNum(v: unknown, lo: number, hi: number, fallback: number): number 
 
 function cleanAts(v: unknown): AtsSource[] {
   if (!Array.isArray(v)) return [...ATS_SOURCES];
+  // An explicitly empty list is a real choice now that "My portals" can carry a
+  // run alone (portals-only Discover). Only a NON-empty list with zero valid
+  // entries still falls back to all sources (malformed input).
+  if (v.length === 0) return [];
   const out = v
     .map((a) => String(a).toLowerCase())
     .filter((a): a is AtsSource => (ATS_SOURCES as string[]).includes(a));
@@ -139,6 +147,7 @@ export function parseExplorePatch(
   if (raw.limit !== undefined) next.limitPerAts = clampNum(raw.limit, 50, 500, base.limitPerAts);
   if (raw.limitPerAts !== undefined) next.limitPerAts = clampNum(raw.limitPerAts, 50, 500, base.limitPerAts);
   if (raw.ats !== undefined) next.ats = cleanAts(raw.ats);
+  if (raw.includePortals !== undefined) next.includePortals = raw.includePortals !== false && raw.includePortals !== "0" && raw.includePortals !== "false";
   return next;
 }
 
@@ -153,6 +162,7 @@ export function filtersToParams(f: ExploreFilters): string {
   if (f.sinceDays !== DEFAULT_FILTERS.sinceDays) sp.set("since", String(f.sinceDays));
   if (f.ats.length !== ATS_SOURCES.length) sp.set("ats", f.ats.join(","));
   if (f.limitPerAts !== DEFAULT_FILTERS.limitPerAts) sp.set("limit", String(f.limitPerAts));
+  if (!f.includePortals) sp.set("portals", "0");
   return sp.toString();
 }
 
@@ -168,6 +178,7 @@ export function paramsToFilters(sp: URLSearchParams, base: ExploreFilters = DEFA
       since: sp.get("since") ?? undefined,
       ats: split(sp.get("ats")),
       limit: sp.get("limit") ?? undefined,
+      includePortals: sp.get("portals") ?? undefined,
     },
     base,
   );

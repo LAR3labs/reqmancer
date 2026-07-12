@@ -102,10 +102,12 @@ export function FilterBuilder({
   filters,
   onChange,
   seededFrom = [],
+  portalSources,
 }: {
   filters: ExploreFilters;
   onChange: (f: ExploreFilters) => void;
   seededFrom?: string[];
+  portalSources?: { boards: string[]; companies: number };
 }) {
   const [advanced, setAdvanced] = useState(false);
   const set = (patch: Partial<ExploreFilters>) => onChange({ ...filters, ...patch });
@@ -157,7 +159,7 @@ export function FilterBuilder({
         </div>
 
         <div>
-          <Label hint={filters.ats.length === 0 ? "pick at least one" : undefined}>Sources</Label>
+          <Label hint={filters.ats.length === 0 && !filters.includePortals ? "pick at least one" : undefined}>Sources</Label>
           <div className="flex flex-wrap gap-1.5">
             {ATS_SOURCES.map((a) => {
               const on = filters.ats.includes(a);
@@ -175,7 +177,33 @@ export function FilterBuilder({
                 </button>
               );
             })}
+            {/* the user's own portals.yml boards+companies via scan.mjs (dry-run, zero tokens) */}
+            <button
+              type="button"
+              onClick={() => set({ includePortals: !filters.includePortals })}
+              title="Scan the boards and companies in your portals.yml (uses its own filters)"
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors max-sm:min-h-[44px]",
+                filters.includePortals ? "border-brand/40 bg-brand-soft text-brand" : "border-border text-muted hover:text-foreground",
+              )}
+            >
+              My portals
+            </button>
           </div>
+          {/* provenance: what "My portals" actually queries, so no result's origin is a mystery */}
+          {filters.includePortals && portalSources && (portalSources.boards.length > 0 || portalSources.companies > 0) && (
+            <p className="mt-1.5 max-w-md text-[11px] leading-relaxed text-faint">
+              My portals ={" "}
+              {portalSources.boards.length > 0 && <span>{portalSources.boards.join(", ")}</span>}
+              {portalSources.boards.length > 0 && portalSources.companies > 0 && " + "}
+              {portalSources.companies > 0 && (
+                <span>
+                  {portalSources.companies} tracked compan{portalSources.companies === 1 ? "y" : "ies"}
+                </span>
+              )}{" "}
+              — from your portals.yml.
+            </p>
+          )}
         </div>
       </div>
 
