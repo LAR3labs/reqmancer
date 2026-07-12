@@ -73,13 +73,14 @@ export function TriageRow({
             target="_blank"
             rel="noreferrer"
             title="Open job posting"
-            className="group/link inline-flex max-w-full items-center gap-1 align-bottom"
+            className="group/link inline-flex max-w-full items-center gap-1 align-bottom focus-visible:underline focus-visible:outline-none"
           >
-            <span className="truncate">
-              <span className="font-medium text-foreground group-hover/link:text-brand group-hover/link:underline">{job.company}</span>
+            <span className="min-w-0 truncate">
+              <span className="font-medium text-foreground group-hover/link:text-brand group-hover/link:underline group-focus-visible/link:text-brand">{job.company}</span>
               <span className="text-muted"> · {job.role}</span>
             </span>
-            <ExternalLink className="size-3 shrink-0 text-faint opacity-0 transition-opacity group-hover/link:opacity-100" />
+            {/* icon cue on hover AND keyboard focus (not hover-only — a11y) */}
+            <ExternalLink className="size-3 shrink-0 text-faint opacity-0 transition-opacity group-hover/link:opacity-100 group-focus-visible/link:opacity-100" />
           </a>
         </p>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
