@@ -107,13 +107,24 @@ type PortalScanJson = {
 
 export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) => void): Promise<DiscoveredOffer[]> {
   return new Promise((resolve) => {
+    // On a portals-only run (no ATS engine to emit its own summary), a bail-out
+    // must still send an empty summary — otherwise the client reads
+    // companiesScanned=0 as "degraded" instead of a clean empty result. Mirrors
+    // the success-path compensation below.
+    const emitEmptySummaryIfPortalsOnly = () => {
+      if (filters.ats.length === 0) {
+        onEvent({ kind: "summary", companiesScanned: 0, unreachable: 0, matches: 0 });
+      }
+    };
     if (!portalScannerSupportsJson()) {
       onEvent({ kind: "log", line: "Portal scan skipped — this checkout's scan.mjs has no --json support." });
+      emitEmptySummaryIfPortalsOnly();
       resolve([]);
       return;
     }
     if (!fs.existsSync(`${careerOpsRoot()}/portals.yml`)) {
       onEvent({ kind: "log", line: "Portal scan skipped — no portals.yml yet (run onboarding)." });
+      emitEmptySummaryIfPortalsOnly();
       resolve([]);
       return;
     }
