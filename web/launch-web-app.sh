@@ -1,7 +1,9 @@
 #!/bin/bash
 # Launched by Career-Ops Web.app — starts the local web UI, shows it in an
 # app-style window, and shuts the server down when the window is closed.
-WEB_DIR="/Users/lroberson19/Documents/Career Search/career-ops/web"
+# Portable: derives its location instead of hardcoding a path, so the repo
+# can live anywhere (and the script survives moves/renames/other machines).
+WEB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT=3000
 URL="http://localhost:$PORT"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -25,7 +27,9 @@ if [ -x "$CHROME" ]; then
   "$CHROME" --app="$URL" --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check > /dev/null 2>&1
   if [ "$STARTED_BY_US" = "1" ]; then
     kill "$SERVER_PID" 2>/dev/null
-    pkill -f "career-ops/web/node_modules/.bin/next" 2>/dev/null
+    # Match the dev server by its actual path (portable — no hardcoded
+    # parent-directory name), and only ours, not other next dev servers.
+    pkill -f "$WEB_DIR/node_modules/.bin/next" 2>/dev/null
   fi
 else
   # No Chrome: plain browser tab; server keeps running (no way to detect close)
