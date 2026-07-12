@@ -16,16 +16,20 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const root = careerOpsRoot();
   const updater = rootScript("update-system");
+  // "unknown" = we could not run the check to a valid result. The banner renders
+  // NOTHING for it — never a green "up to date" pill, which would be a false
+  // all-clear. "up-to-date" is reserved for a check that actually succeeded.
   if (!fs.existsSync(updater)) {
-    return Response.json({ status: "up-to-date" });
+    return Response.json({ status: "unknown" });
   }
   const stdout = await new Promise<string>((resolve) => {
     execFile("node", [updater, "check"], { cwd: root, timeout: 15_000 }, (_err, out) => resolve(out || ""));
   });
   try {
     // The checker prints one JSON object; take the last non-empty line to be safe
-    // against any incidental leading output.
-    const last = stdout.trim().split("\n").filter(Boolean).pop() || "{}";
+    // against any incidental leading output. No output → the check did not run.
+    const last = stdout.trim().split("\n").filter(Boolean).pop();
+    if (!last) return Response.json({ status: "unknown" });
     const j = JSON.parse(last) as { status?: string; local?: string; remote?: string; changelog?: string };
     if (j.status === "update-available") {
       return Response.json({
@@ -36,9 +40,10 @@ export async function GET() {
       });
     }
     // up-to-date carries the version so the UI can show a "v1.18.0" pill;
-    // dismissed / offline / no-remote-version stay silent (no version known).
-    return Response.json({ status: j.status ?? "up-to-date", local: j.local ?? "" });
+    // dismissed / offline / no-remote-version stay silent (no version known). A
+    // missing status is unknown, NOT up-to-date — don't fabricate an all-clear.
+    return Response.json({ status: j.status ?? "unknown", local: j.local ?? "" });
   } catch {
-    return Response.json({ status: "up-to-date" });
+    return Response.json({ status: "unknown" });
   }
 }
