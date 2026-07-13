@@ -136,6 +136,11 @@
     color: #2f2f2f;
   }
 
+  .summary-text strong {
+    font-weight: 700;
+    color: #1a1a1a;
+  }
+
   /* Links must never break across lines */
   a {
     white-space: nowrap;
@@ -143,22 +148,20 @@
 
   /* === CORE COMPETENCIES === */
   .competencies-grid {
-    line-height: 1.6;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  /* Plain-text competencies: pill/chip styling reads as templated or
-     AI-generated to recruiters — render as a normal separated text line. */
   .competency-tag {
     font-family: 'Liberation Sans', 'Helvetica Neue', Arial, 'DejaVu Sans', sans-serif;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 500;
-    color: #1a1a1a;
-  }
-
-  .competency-tag:not(:last-child)::after {
-    content: "  \2022  ";
-    color: hsl(187, 74%, 32%);
-    white-space: pre;
+    color: hsl(187, 74%, 28%);
+    background: hsl(187, 40%, 95%);
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid hsl(187, 40%, 88%);
   }
 
   /* === WORK EXPERIENCE === */
