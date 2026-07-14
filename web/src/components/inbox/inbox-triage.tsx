@@ -71,12 +71,27 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
 
   // Dedupe by URL — pipeline.md can list the same posting twice; it's one job, so it
   // triages once (and Save/Skip/score, all keyed by URL, act on it coherently).
+  // First row wins identity, but later duplicates FILL GAPS in optional metadata:
+  // a legacy row without `posted:` can precede a rewritten row that has it, and
+  // dropping the later row would silently lose the provider's publish date.
   const enriched = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; postedAge: number | null; foundAge: number | null; age: number | null }[] = [];
+    const byUrl = new Map<string, InboxJob>();
     for (const job of inbox) {
-      if (seen.has(job.url)) continue;
-      seen.add(job.url);
+      const first = byUrl.get(job.url);
+      if (!first) {
+        byUrl.set(job.url, job);
+        continue;
+      }
+      byUrl.set(job.url, {
+        ...first,
+        postedAt: first.postedAt ?? job.postedAt,
+        foundAt: first.foundAt ?? job.foundAt,
+        location: first.location ?? job.location,
+        compensation: first.compensation ?? job.compensation,
+      });
+    }
+    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; postedAge: number | null; foundAge: number | null; age: number | null }[] = [];
+    for (const job of byUrl.values()) {
       const postedAge = daysSince(job.postedAt, now); // provider's publish date
       const foundAge = daysSince(job.foundAt, now); // our scanner's first_seen
       // Facet age mirrors Explore's "posted within" semantics: the publish date
