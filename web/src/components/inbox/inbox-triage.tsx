@@ -73,11 +73,15 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   // triages once (and Save/Skip/score, all keyed by URL, act on it coherently).
   const enriched = useMemo(() => {
     const seen = new Set<string>();
-    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; age: number | null }[] = [];
+    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; postedAge: number | null; foundAge: number | null; age: number | null }[] = [];
     for (const job of inbox) {
       if (seen.has(job.url)) continue;
       seen.add(job.url);
-      out.push({ job, source: sourceFromUrl(job.url), seniority: seniorityFromTitle(job.role), age: daysSince(job.postedAt, now) });
+      const postedAge = daysSince(job.postedAt, now); // provider's publish date
+      const foundAge = daysSince(job.foundAt, now); // our scanner's first_seen
+      // Facet age mirrors Explore's "posted within" semantics: the publish date
+      // when the provider gave one, best-effort fallback to discovery date.
+      out.push({ job, source: sourceFromUrl(job.url), seniority: seniorityFromTitle(job.role), postedAge, foundAge, age: postedAge ?? foundAge });
     }
     return out;
   }, [inbox, now]);
@@ -126,7 +130,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   // 🔴 SINGLE ORDER PLUG POINT — freshness only (newest first_seen first; unknown last).
   // A smarter ranker replaces ONLY this comparator; facets/triage/shortlist/score never
   // touch relevance. This is the whole firewall in one line.
-  const ordered = useMemo(() => [...filtered].sort((a, b) => (a.age ?? Infinity) - (b.age ?? Infinity)), [filtered]);
+  const ordered = useMemo(() => [...filtered].sort((a, b) => ((a.foundAge ?? a.age) ?? Infinity) - ((b.foundAge ?? b.age) ?? Infinity)), [filtered]);
 
   const anyFacet = within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
@@ -232,7 +236,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
               key={e.job.url}
               job={e.job}
               source={e.source}
-              age={e.age}
+              postedAge={e.postedAge}
+              foundAge={e.foundAge}
               scored={scoreByUrl.get(e.job.url)}
               selected={selected.has(e.job.url)}
               shortlisted={isShortlisted(e.job.url)}
