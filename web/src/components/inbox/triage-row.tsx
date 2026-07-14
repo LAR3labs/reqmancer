@@ -26,7 +26,8 @@ function agoLabel(age: number | null): string | null {
 export function TriageRow({
   job,
   source,
-  age,
+  postedAge,
+  foundAge,
   scored,
   selected,
   shortlisted,
@@ -36,7 +37,10 @@ export function TriageRow({
 }: {
   job: InboxJob;
   source: AtsSource | null;
-  age: number | null;
+  /** Days since the provider PUBLISHED the posting (null when the provider gave no date). */
+  postedAge: number | null;
+  /** Days since OUR scanner first surfaced the URL (scan-history first_seen). */
+  foundAge: number | null;
   scored?: RowScore;
   selected: boolean;
   shortlisted: boolean;
@@ -44,7 +48,10 @@ export function TriageRow({
   onSave: () => void;
   onSkip: () => void;
 }) {
-  const ago = agoLabel(age);
+  // Two different clocks, labeled honestly: "posted 40d ago · found 2d ago" tells
+  // you a role has been open for weeks even though it just hit your inbox.
+  const postedAgo = agoLabel(postedAge);
+  const foundAgo = agoLabel(foundAge);
   const evaluated = !!scored && (scored.running || scored.score != null);
 
   return (
@@ -86,7 +93,8 @@ export function TriageRow({
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
           {job.location && <span className="truncate">{job.location}</span>}
           {source && <span className="rounded bg-surface-hover px-1 py-px font-medium text-muted">{ATS_LABEL[source]}</span>}
-          {ago && <span>{ago}</span>}
+          {postedAgo && <span>posted {postedAgo}</span>}
+          {foundAgo && <span>found {foundAgo}</span>}
           {/* 🔴 CRUDA: honest "not scored" — no fabricated match%. */}
           {!evaluated && <span className="italic text-muted">not scored</span>}
         </p>

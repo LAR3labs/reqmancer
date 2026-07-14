@@ -45,12 +45,27 @@ function read(rel: string): string | null {
   }
 }
 
-export type InboxJob = { url: string; company: string; role: string; location?: string; compensation?: string; done: boolean; postedAt?: string };
+export type InboxJob = {
+  url: string;
+  company: string;
+  role: string;
+  location?: string;
+  compensation?: string;
+  done: boolean;
+  /** Provider's posting date (labeled `posted:` segment) — when it published the role. */
+  postedAt?: string;
+  /** When OUR scanner first surfaced the URL (scan-history first_seen) — joined in pipelineSummary. */
+  foundAt?: string;
+};
 
 /** Parse data/pipeline.md — `- [ ] URL | Company | Role [| Location [| Compensation]]`.
  *  Positional split (NOT a greedy trailing group): the optional 4th `location`
  *  (#1015) and 5th `compensation` (#1017) columns must NOT bleed into `role`;
- *  any further trailing columns are ignored gracefully. */
+ *  any further trailing columns are ignored gracefully.
+ *  Labeled segments (`posted: YYYY-MM-DD`, `note: …` — see formatPipelineOffer in
+ *  scan.mjs) can ride on ANY row shape after the role, so they are lifted out
+ *  BEFORE the positional read: a 3-column row + `posted:` must not misread the
+ *  date as its location. */
 export function readInbox(): InboxJob[] {
   const md = read("data/pipeline.md");
   if (!md) return [];
@@ -59,14 +74,28 @@ export function readInbox(): InboxJob[] {
     const m = line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
     if (!m) continue;
     const parts = m[2].split("|").map((s) => s.trim());
-    if (parts.length < 3 || !parts[0]) continue; // need at least url | company | role
+    // Lift labeled segments out of the positional stream (they only appear after
+    // the role, so url/company/role — indexes 0-2 — are never label-checked).
+    const positional: string[] = [];
+    let postedAt: string | undefined;
+    for (let i = 0; i < parts.length; i++) {
+      const lm = i >= 3 ? parts[i].match(/^(posted|note):\s*(.*)$/i) : null;
+      if (!lm) {
+        positional.push(parts[i]);
+        continue;
+      }
+      if (lm[1].toLowerCase() === "posted" && /^\d{4}-\d{2}-\d{2}$/.test(lm[2])) postedAt = lm[2];
+      // note: segments are triage-irrelevant here — lifted out and dropped.
+    }
+    if (positional.length < 3 || !positional[0]) continue; // need at least url | company | role
     jobs.push({
       done: m[1].toLowerCase() === "x",
-      url: parts[0],
-      company: parts[1],
-      role: parts[2],
-      location: parts[3] || undefined, // optional 4th column (#1015)
-      compensation: parts[4] || undefined, // optional 5th column (#1017); 6th+ ignored
+      url: positional[0],
+      company: positional[1],
+      role: positional[2],
+      location: positional[3] || undefined, // optional 4th column (#1015)
+      compensation: positional[4] || undefined, // optional 5th column (#1017); 6th+ ignored
+      postedAt,
     });
   }
   return jobs;
@@ -185,9 +214,10 @@ export function pipelineSummary(): PipelineSummary {
   return {
     root,
     rootExists: fs.existsSync(root),
-    // join the freshness date (first_seen) onto each raw posting — the inbox's
-    // triage view orders/faceted-filters on it entirely client-side.
-    inbox: readInbox().map((j) => ({ ...j, postedAt: scanDates.get(j.url) })),
+    // join the discovery date (first_seen) onto each raw posting as foundAt —
+    // distinct from postedAt (the provider's publish date, parsed from the row's
+    // labeled `posted:` segment). The triage view shows both: "posted Xd · found Yd".
+    inbox: readInbox().map((j) => ({ ...j, foundAt: scanDates.get(j.url) })),
     applications: readApplications(),
   };
 }

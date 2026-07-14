@@ -27,6 +27,13 @@ export function addOffersToPipeline(offers: DiscoveredOffer[]): Promise<AddResul
       title: o.title || "",
       location: o.location || "",
       source: o.source || o.ats || "explorer",
+      // Preserve the provider's posting date so formatPipelineOffer can emit its
+      // labeled `posted:` segment. The core writer expects epoch ms (see
+      // postedAtIsoDate in scan.mjs); DiscoveredOffer carries ISO YYYY-MM-DD.
+      postedAt:
+        typeof o.postedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.postedAt)
+          ? Date.parse(`${o.postedAt}T00:00:00Z`)
+          : undefined,
       // Preserve the optional per-offer signal so it survives to pipeline.md.
       // The core writer treats an empty note as absent (byte-identical output).
       note: o.note || "",

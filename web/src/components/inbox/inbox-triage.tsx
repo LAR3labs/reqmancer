@@ -71,13 +71,32 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
 
   // Dedupe by URL — pipeline.md can list the same posting twice; it's one job, so it
   // triages once (and Save/Skip/score, all keyed by URL, act on it coherently).
+  // First row wins identity, but later duplicates FILL GAPS in optional metadata:
+  // a legacy row without `posted:` can precede a rewritten row that has it, and
+  // dropping the later row would silently lose the provider's publish date.
   const enriched = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; age: number | null }[] = [];
+    const byUrl = new Map<string, InboxJob>();
     for (const job of inbox) {
-      if (seen.has(job.url)) continue;
-      seen.add(job.url);
-      out.push({ job, source: sourceFromUrl(job.url), seniority: seniorityFromTitle(job.role), age: daysSince(job.postedAt, now) });
+      const first = byUrl.get(job.url);
+      if (!first) {
+        byUrl.set(job.url, job);
+        continue;
+      }
+      byUrl.set(job.url, {
+        ...first,
+        postedAt: first.postedAt ?? job.postedAt,
+        foundAt: first.foundAt ?? job.foundAt,
+        location: first.location ?? job.location,
+        compensation: first.compensation ?? job.compensation,
+      });
+    }
+    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; postedAge: number | null; foundAge: number | null; age: number | null }[] = [];
+    for (const job of byUrl.values()) {
+      const postedAge = daysSince(job.postedAt, now); // provider's publish date
+      const foundAge = daysSince(job.foundAt, now); // our scanner's first_seen
+      // Facet age mirrors Explore's "posted within" semantics: the publish date
+      // when the provider gave one, best-effort fallback to discovery date.
+      out.push({ job, source: sourceFromUrl(job.url), seniority: seniorityFromTitle(job.role), postedAge, foundAge, age: postedAge ?? foundAge });
     }
     return out;
   }, [inbox, now]);
@@ -126,7 +145,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   // 🔴 SINGLE ORDER PLUG POINT — freshness only (newest first_seen first; unknown last).
   // A smarter ranker replaces ONLY this comparator; facets/triage/shortlist/score never
   // touch relevance. This is the whole firewall in one line.
-  const ordered = useMemo(() => [...filtered].sort((a, b) => (a.age ?? Infinity) - (b.age ?? Infinity)), [filtered]);
+  const ordered = useMemo(() => [...filtered].sort((a, b) => ((a.foundAge ?? a.age) ?? Infinity) - ((b.foundAge ?? b.age) ?? Infinity)), [filtered]);
 
   const anyFacet = within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
@@ -232,7 +251,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
               key={e.job.url}
               job={e.job}
               source={e.source}
-              age={e.age}
+              postedAge={e.postedAge}
+              foundAge={e.foundAge}
               scored={scoreByUrl.get(e.job.url)}
               selected={selected.has(e.job.url)}
               shortlisted={isShortlisted(e.job.url)}
