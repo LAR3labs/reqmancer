@@ -130,7 +130,10 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
     }
     onEvent({ kind: "atsStart", ats: "portals", companies: 0 });
 
-    const child = spawn(process.execPath, [rootScript("scan"), "--dry-run", "--json"], {
+    // --since mirrors runDiscovery: the Explore "posted within" window governs
+    // both engines. Best-effort on this side — postings whose provider reports
+    // no date still pass (scan.mjs buildPostingAgeFilter semantics).
+    const child = spawn(process.execPath, [rootScript("scan"), "--dry-run", "--json", "--since", String(Math.max(1, filters.sinceDays || 7))], {
       cwd: careerOpsRoot(),
       env: { ...process.env },
     });

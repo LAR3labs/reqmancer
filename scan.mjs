@@ -29,6 +29,8 @@
  *   node scan.mjs --verify --throttle          # jittered ~5-10s gap between checks (stay under rate limits)
  *   node scan.mjs --verify --throttle=8000     # custom base gap in ms (waits base..2*base)
  *   node scan.mjs --include-blacklisted        # let data/blacklist.md matches through (annotated)
+ *   node scan.mjs --since 7                    # only postings dated within the last 7 days (overrides max_posting_age_days; undated postings still pass)
+ *   node scan.mjs --dry-run --json             # stdout = ONE portal-scan/v1 JSON object; human progress → stderr
  */
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
@@ -47,7 +49,9 @@ import { normalizeCompany } from './tracker-utils.mjs';
 
 try {
   const { config } = await import('dotenv');
-  config();
+  // quiet: dotenv v17 prints an "injected env" banner to STDOUT at import time,
+  // which would corrupt the --json contract (stdout = one JSON object).
+  config({ quiet: true });
 } catch {
   // dotenv is optional — fall back to process.env if not installed
 }
@@ -1301,6 +1305,26 @@ async function main() {
   const includeBlacklisted = args.includes('--include-blacklisted');
   const companyFlag = args.indexOf('--company');
   const filterCompany = companyFlag !== -1 ? args[companyFlag + 1]?.toLowerCase() : null;
+  // --since N (or --since=N): per-run posting-age window in days. Overrides
+  // config.max_posting_age_days so the web Explore "posted within" control can
+  // govern this scanner too (same flag name as scan-ats-full.mjs). Best-effort
+  // by design: postings whose provider supplies no postedAt still pass — see
+  // buildPostingAgeFilter.
+  const sinceFlag = args.indexOf('--since');
+  const sinceEq = args.find((a) => a.startsWith('--since='));
+  const sinceRaw = sinceFlag !== -1 ? args[sinceFlag + 1] : sinceEq?.split('=')[1];
+  const sinceParsed = Number.parseInt(sinceRaw, 10);
+  const sinceDays = Number.isFinite(sinceParsed) && sinceParsed > 0 ? sinceParsed : null;
+  // --json: reserve stdout for ONE machine-readable result object (schema
+  // portal-scan/v1) and move ALL human progress to stderr. The web UI's
+  // Discover button (web/src/lib/core/scan.ts runPortalScan) probes for this
+  // contract and spawns `scan.mjs --dry-run --json --since N`.
+  const jsonMode = args.includes('--json');
+  if (jsonMode) {
+    // Global redirect, deliberately: every human line in this run (including
+    // module helpers) must land on stderr so stdout stays a single JSON object.
+    console.log = (...a) => console.error(...a);
+  }
 
   // 1. Load providers
   const providers = await loadProviders(PROVIDERS_DIR);
@@ -1342,7 +1366,7 @@ async function main() {
   }
 
   const locationFilter = buildLocationFilter(config.location_filter);
-  const postingAgeFilter = buildPostingAgeFilter(config.max_posting_age_days);
+  const postingAgeFilter = buildPostingAgeFilter(sinceDays ?? config.max_posting_age_days);
   const salaryFilter = buildSalaryFilter(config.salary_filter);
   const trustValidator = buildTrustValidator(config.trust_filter);
   const contentFilter = buildContentFilter(config.content_filter);
@@ -1649,7 +1673,7 @@ async function main() {
     console.log(`Filtered by tier:      ${totalFilteredTier} removed`);
   }
   console.log(`Filtered by location:  ${totalFilteredLocation} removed`);
-  if (config.max_posting_age_days != null || totalFilteredPostingAge > 0) {
+  if (sinceDays != null || config.max_posting_age_days != null || totalFilteredPostingAge > 0) {
     console.log(`Filtered by age:       ${totalFilteredPostingAge} removed`);
   }
   console.log(`Filtered by salary:   ${totalFilteredSalary} removed`);
@@ -1774,6 +1798,26 @@ async function main() {
 
   console.log(`\n→ Run /career-ops pipeline to evaluate new offers.`);
   console.log('→ Share results and get help: https://discord.gg/8pRpHETxa4');
+
+  // --json contract (schema portal-scan/v1): ONE authoritative object on stdout,
+  // emitted last so every human line above (redirected to stderr) is already out.
+  // Shape mirrors the web ACL's PortalScanJson (web/src/lib/core/scan.ts).
+  if (jsonMode) {
+    process.stdout.write(JSON.stringify({
+      schema: 'portal-scan/v1',
+      companiesScanned: summaryCompanies,
+      boardsScanned: summaryBoards,
+      offers: verifiedOffers.map((o) => ({
+        company: o.company,
+        title: o.title,
+        url: o.url,
+        location: o.location || null,
+        postedAt: postedAtIsoDate(o.postedAt) || null,
+        source: o.source,
+      })),
+      errors: errors.length,
+    }) + '\n');
+  }
 }
 
 // Only run main() when invoked directly (`node scan.mjs`), not when imported by tests.
