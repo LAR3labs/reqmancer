@@ -35,20 +35,29 @@ background_rebuild() {
   # competing build into the same dist dir. mkdir is the atomic primitive; a
   # stale lock (crashed builder) is reclaimed.
   if ! mkdir "$BUILD_LOCK" 2>/dev/null; then
-    local owner
+    local owner lock_age
     owner="$(cat "$BUILD_LOCK/pid" 2>/dev/null)"
     if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
       return 0
     fi
+    if [ -z "$owner" ]; then
+      # No pid file yet: either a freshly created lock whose worker hasn't
+      # written its pid (spawn is async), or debris from a spawner that died
+      # in that window. Reclaim only once it's clearly not initializing.
+      lock_age=$(( $(date +%s) - $(stat -f %m "$BUILD_LOCK" 2>/dev/null || echo 0) ))
+      [ "$lock_age" -lt 120 ] && return 0
+    fi
     rm -rf "$BUILD_LOCK"
     mkdir "$BUILD_LOCK" 2>/dev/null || return 0
   fi
-  # Separate bash invocation (not a subshell): macOS ships bash 3.2, which has
-  # no BASHPID — in a fresh process $$ is the worker's own PID. nohup detaches
-  # it from this script, which is about to exec the dev server.
+  # Worker runs in its OWN SESSION (node spawn detached — macOS ships no
+  # setsid(1), and a plain background job shares our process group, which
+  # launch-web-app.sh group-kills on window close; the build must survive
+  # that). Fresh bash process: on macOS's bash 3.2 there is no BASHPID, but
+  # in a new process $$ IS the worker's own pid.
   # Stamp is written only after a successful build, so a crashed/killed build
   # leaves no stamp and the next launch rebuilds again.
-  nohup bash -c '
+  WORKER_BODY='
     echo "$$" > "$1/pid"
     trap "rm -rf \"$1\"" EXIT
     rm -f "$2"
@@ -56,8 +65,12 @@ background_rebuild() {
       echo "$5" > "$2"
       echo "career-ops: production bundle ready — next launch serves it instantly" >> "$4"
     fi
-  ' build-worker "$BUILD_LOCK" "$STAMP_FILE" "$PROD_DIST" "$BUILD_LOG" "$STAMP" > /dev/null 2>&1 &
-  disown 2>/dev/null || true
+  '
+  node -e '
+    const { spawn } = require("child_process");
+    const [body, ...args] = process.argv.slice(1);
+    spawn("/bin/bash", ["-c", body, "build-worker", ...args], { detached: true, stdio: "ignore" }).unref();
+  ' "$WORKER_BODY" "$BUILD_LOCK" "$STAMP_FILE" "$PROD_DIST" "$BUILD_LOG" "$STAMP" || rm -rf "$BUILD_LOCK"
 }
 
 if [ -f "$PROD_DIST/BUILD_ID" ] && [ "$(cat "$STAMP_FILE" 2>/dev/null)" = "$STAMP" ]; then
