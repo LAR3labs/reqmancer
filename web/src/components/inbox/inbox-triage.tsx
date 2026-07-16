@@ -15,7 +15,36 @@ import { cn } from "@/lib/cn";
 const SHORTLIST_KEY = "career-ops:shortlist";
 const HIDDEN_KEY = "career-ops:hidden";
 const CONFIG_KEY = "career-ops:config";
+const SORT_KEY_STORE = "career-ops:inbox-sort";
 const BATCH = 20;
+
+type TriageItem = {
+  job: InboxJob;
+  source: AtsSource | null;
+  seniority: Seniority | null;
+  postedAge: number | null;
+  foundAge: number | null;
+  age: number | null;
+};
+
+// 🔴 SINGLE ORDER PLUG POINT — user-picked sort criterion, freshness as the default
+// AND the tie-breaker for every other criterion (unknown values always sink to the
+// bottom). A smarter ranker replaces ONLY these comparators; facets/triage/shortlist/
+// score never touch relevance.
+const byFreshness = (a: TriageItem, b: TriageItem) => ((a.foundAge ?? a.age) ?? Infinity) - ((b.foundAge ?? b.age) ?? Infinity);
+const INBOX_SORTS = [
+  { key: "found", label: "Newest found", cmp: byFreshness },
+  { key: "posted", label: "Newest posted", cmp: (a: TriageItem, b: TriageItem) => (a.postedAge ?? Infinity) - (b.postedAge ?? Infinity) },
+  { key: "company", label: "Company A–Z", cmp: (a: TriageItem, b: TriageItem) => a.job.company.localeCompare(b.job.company) },
+  { key: "role", label: "Role A–Z", cmp: (a: TriageItem, b: TriageItem) => a.job.role.localeCompare(b.job.role) },
+  {
+    key: "seniority",
+    label: "Seniority",
+    cmp: (a: TriageItem, b: TriageItem) =>
+      (a.seniority ? SENIORITY_ORDER.indexOf(a.seniority) : Infinity) - (b.seniority ? SENIORITY_ORDER.indexOf(b.seniority) : Infinity),
+  },
+] as const;
+type InboxSortKey = (typeof INBOX_SORTS)[number]["key"];
 
 // The inbox as a TRIAGE surface: Abundance → Triage → Shortlist → Opt-in Score.
 // Default is a small fresh batch (never the full wall); free facets + Save/Skip narrow
@@ -31,6 +60,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   const [locQ, setLocQ] = useState("");
   const [kw, setKw] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [sortBy, setSortBy] = useState<InboxSortKey>("found");
 
   // persisted triage state + ephemeral selection/undo
   const [shortlist, setShortlist] = useState<ShortItem[]>([]);
@@ -48,6 +78,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       if (h) setHidden(JSON.parse(h));
       const c = localStorage.getItem(CONFIG_KEY);
       setHasCli(!!(c && JSON.parse(c).cliId));
+      const so = localStorage.getItem(SORT_KEY_STORE);
+      if (so && INBOX_SORTS.some((s) => s.key === so)) setSortBy(so as InboxSortKey);
     } catch {
       /* ignore */
     }
@@ -59,6 +91,9 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   useEffect(() => {
     if (loaded) try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)); } catch { /* quota */ }
   }, [hidden, loaded]);
+  useEffect(() => {
+    if (loaded) try { localStorage.setItem(SORT_KEY_STORE, sortBy); } catch { /* quota */ }
+  }, [sortBy, loaded]);
   // auto-dismiss the undo toast
   useEffect(() => {
     if (!undo) return;
@@ -90,7 +125,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
         compensation: first.compensation ?? job.compensation,
       });
     }
-    const out: { job: InboxJob; source: AtsSource | null; seniority: Seniority | null; postedAge: number | null; foundAge: number | null; age: number | null }[] = [];
+    const out: TriageItem[] = [];
     for (const job of byUrl.values()) {
       const postedAge = daysSince(job.postedAt, now); // provider's publish date
       const foundAge = daysSince(job.foundAt, now); // our scanner's first_seen
@@ -142,10 +177,12 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     [enriched, hidden, within, sources, seniorities, locQ, kw],
   );
 
-  // 🔴 SINGLE ORDER PLUG POINT — freshness only (newest first_seen first; unknown last).
-  // A smarter ranker replaces ONLY this comparator; facets/triage/shortlist/score never
-  // touch relevance. This is the whole firewall in one line.
-  const ordered = useMemo(() => [...filtered].sort((a, b) => ((a.foundAge ?? a.age) ?? Infinity) - ((b.foundAge ?? b.age) ?? Infinity)), [filtered]);
+  // Order by the user's picked criterion (see INBOX_SORTS — the order plug point),
+  // freshness breaking ties so equal keys still read newest-first.
+  const ordered = useMemo(() => {
+    const primary = INBOX_SORTS.find((s) => s.key === sortBy)?.cmp ?? byFreshness;
+    return [...filtered].sort((a, b) => primary(a, b) || byFreshness(a, b));
+  }, [filtered, sortBy]);
 
   const anyFacet = within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   const capped = !showAll && !anyFacet;
@@ -220,15 +257,37 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       />
 
       {/* batch header: fresh slice by default, or the full filtered set */}
-      <div className="mt-4 flex items-baseline justify-between gap-3">
+      <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">
-          {capped ? "Fresh — worth a look" : anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : "All roles"}
+          {capped
+            ? sortBy === "found"
+              ? "Fresh — worth a look"
+              : `First ${Math.min(BATCH, ordered.length)}`
+            : anyFacet
+              ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}`
+              : "All roles"}
         </p>
-        {hiddenCount > 0 && (
-          <button type="button" onClick={() => setHidden([])} className="text-xs text-faint transition-colors hover:text-foreground">
-            {hiddenCount} hidden · restore
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {hiddenCount > 0 && (
+            <button type="button" onClick={() => setHidden([])} className="text-xs text-faint transition-colors hover:text-foreground">
+              {hiddenCount} hidden · restore
+            </button>
+          )}
+          <label className="inline-flex items-center gap-1.5 text-xs text-faint">
+            Sort
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as InboxSortKey)}
+              className="rounded-md border border-border bg-surface/60 px-2 py-1 text-xs text-muted outline-none transition-colors hover:text-foreground focus:border-brand/50 max-sm:min-h-[36px]"
+            >
+              {INBOX_SORTS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {/* multi-select action bar */}
