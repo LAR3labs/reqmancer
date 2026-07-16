@@ -58,6 +58,12 @@ export function daysSince(iso: string | undefined, now: number): number | null {
   return Math.floor((now - t) / 86_400_000);
 }
 
+// formatSalary is defined in format-salary.mjs (plain JS) so it can be shared
+// with the test suite without a TypeScript runner. Import for internal use
+// and re-export for external consumers (triage-row.tsx, etc.).
+import { formatSalary } from "./format-salary.mjs";
+export { formatSalary };
+
 // Freshness windows mirror the Explore "posted within" segmented control so the two
 // surfaces feel like one system. A posting passes a window if its age ≤ the window.
 export const FRESHNESS_WINDOWS = [
