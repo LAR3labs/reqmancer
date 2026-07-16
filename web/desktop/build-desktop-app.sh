@@ -11,7 +11,8 @@ trap 'rm -rf "$BUILD"' EXIT
 
 echo "Compiling…"
 cp "$HERE/CareerOpsApp.swift" "$BUILD/main.swift"
-swiftc -O -o "$BUILD/Career-Ops Web" "$BUILD/main.swift"
+# Pin the minimum OS to match LSMinimumSystemVersion in Info.plist
+swiftc -O -target "$(uname -m)-apple-macos12.0" -o "$BUILD/Career-Ops Web" "$BUILD/main.swift"
 
 # Preserve the existing icon if the old bundle had one
 ICON=""

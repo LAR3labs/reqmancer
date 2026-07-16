@@ -48,10 +48,16 @@ if ! curl -s -o /dev/null --max-time 2 "$URL"; then
   done
 fi
 
-# Window already open (server was down and got restarted above): the open
-# window will reconnect on reload. Stay alive only to shut down the server we
-# just started once that window closes; never open a second window.
+# Window already open (server was down and got restarted above): nudge it off
+# the error page with a Cmd+R to the focused window — best-effort, since
+# keystrokes need Accessibility permission the user may not have granted.
+# Then stay alive only to shut down the server we just started once that
+# window closes; never open a second window.
 if [ -n "$EXISTING_WINDOW_PID" ]; then
+  osascript -e "tell application \"System Events\" to tell (first process whose unix id is $EXISTING_WINDOW_PID)" \
+            -e "set frontmost to true" \
+            -e "keystroke \"r\" using command down" \
+            -e "end tell" > /dev/null 2>&1 || true
   if [ "$STARTED_BY_US" = "1" ]; then
     while kill -0 "$EXISTING_WINDOW_PID" 2>/dev/null; do sleep 5; done
     kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null

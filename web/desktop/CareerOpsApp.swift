@@ -132,15 +132,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        // Host allowlist for EVERY navigation type — redirects, form posts and
+        // Origin allowlist for EVERY navigation type — redirects, form posts and
         // script-driven navigations must not replace the app inside the window.
-        // Non-http(s) schemes (about:blank splash, data:) stay allowed.
+        // Only the app's own origin (host AND port) stays in the webview; another
+        // local dev server on a different port is a different origin and goes to
+        // the browser. Non-http(s) schemes (about:blank splash, data:) stay allowed.
         if let url = navigationAction.request.url,
-           let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
-           url.host != "localhost", url.host != "127.0.0.1" {
-            NSWorkspace.shared.open(url)
-            decisionHandler(.cancel)
-            return
+           let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            let localHost = url.host == "localhost" || url.host == "127.0.0.1"
+            if !(localHost && url.port == appURL.port) {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
         }
         decisionHandler(.allow)
     }
