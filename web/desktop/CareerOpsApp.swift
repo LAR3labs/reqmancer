@@ -135,7 +135,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = navigationAction.request.url {
             if isAppOrigin(url) {
-                webView.load(URLRequest(url: url))
+                // keep the original request — a rebuilt URLRequest would replay
+                // a same-origin _blank POST as a GET
+                webView.load(navigationAction.request)
             } else if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
                 NSWorkspace.shared.open(url)
             }
