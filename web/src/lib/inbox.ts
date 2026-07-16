@@ -58,34 +58,11 @@ export function daysSince(iso: string | undefined, now: number): number | null {
   return Math.floor((now - t) / 86_400_000);
 }
 
-// Currency symbols for the handful of codes the scanners actually emit; anything
-// else keeps its ISO code as a suffix ("120000-160000 CHF" → "120k–160k CHF").
-const CURRENCY_SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£" };
-
-/** One number of annual comp → compact display ("240570" → "241k"). Values under
- *  1000 (hourly rates, malformed data) stay verbatim rather than rounding to "0k". */
-function compactAmount(n: number): string {
-  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
-}
-
-/** Format the pipeline row's raw compensation cell (canonical `min-max CUR` /
- *  `value CUR` — see formatCompensation in scan.mjs) into a compact display
- *  string ("240570-297000 USD" → "$241k–$297k"). A non-empty cell that doesn't
- *  parse (hand-pasted rows aren't canonical) passes through verbatim — showing
- *  the user's own text beats hiding it. Empty/absent → null (caller shows N/A). */
-export function formatSalary(compensation: string | undefined): string | null {
-  const raw = compensation?.trim();
-  if (!raw) return null;
-  const m = raw.match(/^(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?))?\s*([A-Za-z]{3})?$/);
-  if (!m) return raw;
-  const lo = Number(m[1]);
-  const hi = m[2] ? Number(m[2]) : null;
-  const code = (m[3] || "").toUpperCase();
-  const symbol = CURRENCY_SYMBOL[code];
-  const prefix = symbol ?? "";
-  const range = hi != null && hi !== lo ? `${prefix}${compactAmount(lo)}–${prefix}${compactAmount(hi)}` : `${prefix}${compactAmount(lo)}`;
-  return symbol || !code ? range : `${range} ${code}`;
-}
+// formatSalary is defined in format-salary.mjs (plain JS) so it can be shared
+// with the test suite without a TypeScript runner. Import for internal use
+// and re-export for external consumers (triage-row.tsx, etc.).
+import { formatSalary } from "./format-salary.mjs";
+export { formatSalary };
 
 // Freshness windows mirror the Explore "posted within" segmented control so the two
 // surfaces feel like one system. A posting passes a window if its age ≤ the window.
