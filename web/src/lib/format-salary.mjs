@@ -8,15 +8,17 @@
 const CURRENCY_SYMBOL = { USD: "$", EUR: "€", GBP: "£" };
 
 /** One number of annual comp → compact display ("240570" → "241k"). Values under
- *  1000 (hourly rates, malformed data) stay verbatim rather than rounding to "0k";
- *  values at 1M+ scale to "M" with one decimal, trailing .0 dropped ("1200000" →
- *  "1.2M") rather than stacking up as an unreadable "1200k".
+ *  1000 (hourly rates, malformed data) keep their original token verbatim — not
+ *  String(Number): "85.50" must stay "85.50", not become "85.5" — rather than
+ *  rounding to "0k"; values at 1M+ scale to "M" with one decimal, trailing .0
+ *  dropped ("1200000" → "1.2M") rather than stacking up as an unreadable "1200k".
  *  @param {number} n
+ *  @param {string} token the raw matched digits, preserved below 1000
  *  @returns {string}
  */
-function compactAmount(n) {
+function compactAmount(n, token) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : token;
 }
 
 /** Format the pipeline row's raw compensation cell (canonical `min-max CUR` /
@@ -34,12 +36,22 @@ export function formatSalary(compensation) {
   if (!m) return raw;
   let lo = Number(m[1]);
   let hi = m[2] ? Number(m[2]) : null;
+  // Raw tokens travel with their parsed values so the sub-1000 verbatim branch
+  // can render exactly what the row said ("85.50", leading zeroes and all).
+  let loTok = m[1];
+  let hiTok = m[2] ?? "";
   // Hand-typed rows sometimes reverse the bounds ("160000-120000") — render the
   // range ascending regardless, because "$160k–$120k" reads as a data bug.
-  if (hi != null && hi < lo) [lo, hi] = [hi, lo];
+  if (hi != null && hi < lo) {
+    [lo, hi] = [hi, lo];
+    [loTok, hiTok] = [hiTok, loTok];
+  }
   const code = (m[3] || "").toUpperCase();
   const symbol = CURRENCY_SYMBOL[code];
   const prefix = symbol ?? "";
-  const range = hi != null && hi !== lo ? `${prefix}${compactAmount(lo)}–${prefix}${compactAmount(hi)}` : `${prefix}${compactAmount(lo)}`;
+  const range =
+    hi != null && hi !== lo
+      ? `${prefix}${compactAmount(lo, loTok)}–${prefix}${compactAmount(hi, hiTok)}`
+      : `${prefix}${compactAmount(lo, loTok)}`;
   return symbol || !code ? range : `${range} ${code}`;
 }

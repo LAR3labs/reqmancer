@@ -68,6 +68,14 @@ test("values under 1000 stay verbatim (hourly rates, malformed data)", () => {
   assert.equal(formatSalary("85 USD"), "$85");
 });
 
+test("sub-1000 values keep their exact token, not String(Number)", () => {
+  assert.equal(formatSalary("85.50 USD"), "$85.50");
+});
+
+test("sub-1000 ranged values keep their exact tokens even when reversed", () => {
+  assert.equal(formatSalary("90.00-45.50 USD"), "$45.50–$90.00");
+});
+
 test("unparsable free text passes through verbatim", () => {
   assert.equal(formatSalary("competitive + equity"), "competitive + equity");
 });
