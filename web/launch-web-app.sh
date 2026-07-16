@@ -18,12 +18,13 @@ PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
 # If the app window is already open (a Chrome process using our dedicated
 # profile), bring it to the front instead of spawning a second window.
 # Without this, relaunching the .app opened a duplicate/blank Chrome window.
+# Detection must not depend on Accessibility permission: record the PID from
+# pgrep alone (single-instance logic keys off it), focus is best-effort only.
 EXISTING_WINDOW_PID=""
 for pid in $(pgrep -f -- "--user-data-dir=$PROFILE" 2>/dev/null); do
-  if osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" > /dev/null 2>&1; then
-    EXISTING_WINDOW_PID="$pid"
-    break
-  fi
+  EXISTING_WINDOW_PID="$pid"
+  osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" > /dev/null 2>&1 || true
+  break
 done
 
 # Only short-circuit when the server is actually serving — if it crashed while
@@ -82,6 +83,10 @@ if [ -x "$CHROME" ]; then
       j = JSON.parse(fs.readFileSync(p, "utf8"));
     } catch (e) {
       if (e.code !== "ENOENT") { console.error("prefs unreadable, not seeding:", e.message); process.exit(1); }
+    }
+    if (j === null || typeof j !== "object" || Array.isArray(j)) {
+      console.error("prefs has unexpected JSON shape, not seeding");
+      process.exit(1);
     }
     j.session = { ...(j.session || {}), restore_on_startup: 4, startup_urls: [url] };
     j.homepage = url;
