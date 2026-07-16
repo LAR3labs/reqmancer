@@ -18,8 +18,8 @@ import type { DiscoveredOffer } from "./scan";
  */
 export type AddResult = { added: number; error?: string };
 
-export function addOffersToPipeline(offers: DiscoveredOffer[]): Promise<AddResult> {
-  const clean = offers
+function cleanOffers(offers: DiscoveredOffer[]) {
+  return offers
     .filter((o) => o && typeof o.url === "string" && /^https?:\/\//i.test(o.url))
     .map((o) => ({
       url: o.url,
@@ -38,6 +38,26 @@ export function addOffersToPipeline(offers: DiscoveredOffer[]): Promise<AddResul
       // The core writer treats an empty note as absent (byte-identical output).
       note: o.note || "",
     }));
+}
+
+export function addOffersToPipeline(offers: DiscoveredOffer[]): Promise<AddResult> {
+  return runCoreWriter(offers, `appendToPipeline(offers); appendToScanHistory(offers, date, "added");`);
+}
+
+/**
+ * "Not interested" — records the URLs in data/scan-history.tsv with status
+ * `dismissed` WITHOUT touching data/pipeline.md. The core's dedup treats any
+ * non-`added` status as permanently seen (shouldDedupScanHistoryRow), so a
+ * dismissed posting stops resurfacing in every scanner — free Explore scans,
+ * AI Discover's dedup context, and the home's "What's new" loop — while never
+ * cluttering the pipeline page. Append-only, same canonical writer as Add.
+ */
+export function dismissOffers(offers: DiscoveredOffer[]): Promise<AddResult> {
+  return runCoreWriter(offers, `appendToScanHistory(offers, date, "dismissed");`);
+}
+
+function runCoreWriter(offers: DiscoveredOffer[], writeStmts: string): Promise<AddResult> {
+  const clean = cleanOffers(offers);
   if (clean.length === 0) return Promise.resolve({ added: 0 });
 
   // Data-only / pre-scan-ats checkout has no scan.mjs writers → fail with an
@@ -56,8 +76,7 @@ process.stdin.on("end", () => {
   try {
     const offers = JSON.parse(input);
     const date = new Date().toISOString().slice(0, 10);
-    appendToPipeline(offers);
-    appendToScanHistory(offers, date, "added");
+    ${writeStmts}
     process.stdout.write(JSON.stringify({ added: offers.length }));
   } catch (e) {
     process.stdout.write(JSON.stringify({ added: 0, error: String((e && e.message) || e) }));

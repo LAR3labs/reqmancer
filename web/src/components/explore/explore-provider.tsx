@@ -59,8 +59,11 @@ type ExploreCtx = {
   error: string;
   added: Set<string>;
   adding: Set<string>;
+  dismissed: Set<string>;
+  dismissing: Set<string>;
   discover: () => Promise<void>;
   addToPipeline: (offers: DiscoveredOffer[]) => Promise<number>;
+  dismiss: (offers: DiscoveredOffer[]) => Promise<number>;
   applyPatch: (raw: Record<string, unknown>, opts?: { merge?: boolean; run?: boolean }) => void;
   reset: () => void;
   // ── AI search (modes/discover.md) ──
@@ -99,6 +102,7 @@ type ResultSnapshot = {
   status: string;
   error: string;
   added: string[];
+  dismissed?: string[];
   aiTrace: AiTraceChunk[];
   aiCost: AiCost;
   aiIntent: string;
@@ -123,6 +127,8 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState("");
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissing, setDismissing] = useState<Set<string>>(new Set());
   const [mode, setModeState] = useState<ExploreMode>("scan");
   const [aiIntent, setAiIntent] = useState("");
   const [aiTrace, setAiTrace] = useState<AiTraceChunk[]>([]);
@@ -312,6 +318,34 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [added, router]);
 
+  // "Not interested" — records the URLs as dismissed in scan-history so no future
+  // scan (free, AI, or What's-new) resurfaces them. Never touches pipeline.md.
+  const dismiss = useCallback(async (list: DiscoveredOffer[]) => {
+    const fresh = list.filter((o) => !dismissed.has(o.url) && !added.has(o.url));
+    if (fresh.length === 0) return 0;
+    setDismissing((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+    try {
+      const r = await fetch("/api/explore/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offers: fresh }),
+      });
+      const d = (await r.json()) as { dismissed?: number };
+      if (d.dismissed && d.dismissed > 0) {
+        setDismissed((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+      }
+      return d.dismissed ?? 0;
+    } catch {
+      return 0;
+    } finally {
+      setDismissing((s) => {
+        const next = new Set(s);
+        for (const o of fresh) next.delete(o.url);
+        return next;
+      });
+    }
+  }, [dismissed, added]);
+
   const applyPatch = useCallback((raw: Record<string, unknown>, opts?: { merge?: boolean; run?: boolean }) => {
     const next = parseExplorePatch(raw, filtersRef.current, opts?.merge ?? false);
     setFilters(next);
@@ -470,6 +504,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setStatus(typeof snap.status === "string" ? snap.status : "");
     setError(typeof snap.error === "string" ? snap.error : "");
     setAdded(new Set(Array.isArray(snap.added) ? snap.added : []));
+    setDismissed(new Set(Array.isArray(snap.dismissed) ? snap.dismissed : []));
     setAiTrace(Array.isArray(snap.aiTrace) ? snap.aiTrace : []);
     setAiCost(snap.aiCost ?? { searches: 0, candidates: 0, fetches: 0 });
     if (typeof snap.aiIntent === "string") setAiIntent(snap.aiIntent);
@@ -485,7 +520,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     try {
       const snap: ResultSnapshot = {
         v: 1, mode, phase, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources,
-        partial, status, error, added: [...added], aiTrace, aiCost, aiIntent,
+        partial, status, error, added: [...added], dismissed: [...dismissed], aiTrace, aiCost, aiIntent,
       };
       sessionStorage.setItem(RESULTS_KEY, JSON.stringify(snap));
     } catch {
@@ -497,11 +532,11 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     () => ({
       filters, setFilters, initFilters, phase,
       running: phase === "casting" || phase === "scanning" || phase === "revealing" || phase === "hunting",
-      offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding,
-      discover, addToPipeline, applyPatch, reset,
+      offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing,
+      discover, addToPipeline, dismiss, applyPatch, reset,
       mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
     }),
-    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, aiIntent, discoverAI, aiTrace, aiCost],
+    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing, discover, addToPipeline, dismiss, applyPatch, reset, mode, setMode, aiIntent, discoverAI, aiTrace, aiCost],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

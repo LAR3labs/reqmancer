@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Plus, Check, Loader2, ShieldQuestion, Sparkles, Coins } from "lucide-react";
+import { ExternalLink, Plus, Check, Loader2, ShieldQuestion, Sparkles, Coins, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { ATS_LABEL, type AtsSource, type DiscoveredOffer } from "@/lib/explore";
@@ -39,7 +39,7 @@ function Logo({ company }: { company: string }) {
 const WORKER_LABEL: Record<string, string> = { evaluate: "Evaluating…", pdf: "Preparing CV…", research: "Researching…", apply: "Filling…" };
 
 export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: DiscoveredOffer; inPipeline: boolean; evaluatedN?: string }) {
-  const { added, adding, addToPipeline } = useExplore();
+  const { added, adding, addToPipeline, dismissing, dismiss } = useExplore();
   const { jobs, startJob } = useJobs();
 
   // GLOBAL worker awareness: any worker acting on this URL drives the CTA, here
@@ -54,6 +54,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
 
   const isAdded = added.has(offer.url) || inPipeline || working || doneEval;
   const isAdding = adding.has(offer.url);
+  const isDismissing = dismissing.has(offer.url);
   const unverified = offer.verification === "unconfirmed";
   const fresh = freshness(offer.postedAt) || offer.postedHint || "";
 
@@ -83,6 +84,18 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
         >
           <ExternalLink className="size-4" />
         </a>
+        {!isAdded && (
+          <button
+            type="button"
+            disabled={isDismissing}
+            onClick={() => void dismiss([offer])}
+            title="Not interested — hide this posting from every future scan"
+            aria-label="Not interested"
+            className="-m-1 inline-flex shrink-0 items-center justify-center rounded p-1 text-faint transition-colors hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px]"
+          >
+            {isDismissing ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
