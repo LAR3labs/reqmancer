@@ -9,10 +9,8 @@ APP="$HOME/Applications/Career-Ops Web.app"
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
 
-# Bake the repo's web dir into the source (the app must find next dev at launch)
-sed "s|WEB_DIR_PLACEHOLDER|$WEB_DIR|" "$HERE/CareerOpsApp.swift" > "$BUILD/main.swift"
-
 echo "Compiling…"
+cp "$HERE/CareerOpsApp.swift" "$BUILD/main.swift"
 swiftc -O -o "$BUILD/Career-Ops Web" "$BUILD/main.swift"
 
 # Preserve the existing icon if the old bundle had one
@@ -47,6 +45,9 @@ $( [ -n "$ICON" ] && echo "  <key>CFBundleIconFile</key><string>AppIcon</string>
 </dict>
 </plist>
 PLIST
+
+# Bake the repo path in via plutil, which escapes any characters safely
+plutil -insert CareerOpsWebDir -string "$WEB_DIR" "$APP/Contents/Info.plist"
 
 codesign --force -s - "$APP" 2>/dev/null || true
 echo "Built: $APP"

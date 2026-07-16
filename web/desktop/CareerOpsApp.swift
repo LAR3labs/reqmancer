@@ -8,7 +8,13 @@
 import Cocoa
 import WebKit
 
-let webDir = "WEB_DIR_PLACEHOLDER"
+// Baked in by the build script via Info.plist (plutil escapes any path safely)
+let webDir: String = {
+    guard let dir = Bundle.main.object(forInfoDictionaryKey: "CareerOpsWebDir") as? String else {
+        fatalError("CareerOpsWebDir missing from Info.plist — rebuild with build-desktop-app.sh")
+    }
+    return dir
+}()
 let appURL = URL(string: "http://localhost:3000")!
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUIDelegate, WKNavigationDelegate {
@@ -44,10 +50,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
     // ── server lifecycle ────────────────────────────────────────────────────
 
     func ping(_ done: @escaping (Bool) -> Void) {
-        var req = URLRequest(url: appURL)
+        // Probe the app's own version endpoint, not just "anything answers on
+        // :3000" — an unrelated dev server on the port must not be mistaken
+        // for career-ops.
+        var req = URLRequest(url: appURL.appendingPathComponent("api/version"))
         req.timeoutInterval = 2
-        URLSession.shared.dataTask(with: req) { _, resp, _ in
-            done((resp as? HTTPURLResponse) != nil)
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            let ok = (resp as? HTTPURLResponse)?.statusCode == 200
+                && data.map { String(decoding: $0, as: UTF8.self).contains("\"version\"") } == true
+            done(ok)
         }.resume()
     }
 
@@ -121,9 +132,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if navigationAction.navigationType == .linkActivated,
-           let url = navigationAction.request.url,
-           let host = url.host, host != "localhost", host != "127.0.0.1" {
+        // Host allowlist for EVERY navigation type — redirects, form posts and
+        // script-driven navigations must not replace the app inside the window.
+        // Non-http(s) schemes (about:blank splash, data:) stay allowed.
+        if let url = navigationAction.request.url,
+           let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+           url.host != "localhost", url.host != "127.0.0.1" {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
             return

@@ -11,14 +11,26 @@ PROFILE="$HOME/.career-ops-web-window"   # separate profile so the window is its
 
 cd "$WEB_DIR" || exit 1
 
+# GUI applets launch with a bare PATH; node (which next needs, and which the
+# prefs seeding below uses) typically lives in one of these.
+PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+
 # If the app window is already open (a Chrome process using our dedicated
-# profile), just bring it to the front instead of spawning a second window.
+# profile), bring it to the front instead of spawning a second window.
 # Without this, relaunching the .app opened a duplicate/blank Chrome window.
+EXISTING_WINDOW_PID=""
 for pid in $(pgrep -f -- "--user-data-dir=$PROFILE" 2>/dev/null); do
   if osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" > /dev/null 2>&1; then
-    exit 0
+    EXISTING_WINDOW_PID="$pid"
+    break
   fi
 done
+
+# Only short-circuit when the server is actually serving — if it crashed while
+# the window stayed open, fall through and restart it before returning.
+if [ -n "$EXISTING_WINDOW_PID" ] && curl -s -o /dev/null --max-time 2 "$URL"; then
+  exit 0
+fi
 
 STARTED_BY_US=0
 if ! curl -s -o /dev/null --max-time 2 "$URL"; then
@@ -36,24 +48,48 @@ if ! curl -s -o /dev/null --max-time 2 "$URL"; then
   done
 fi
 
+# Window already open (server was down and got restarted above): the open
+# window will reconnect on reload. Stay alive only to shut down the server we
+# just started once that window closes; never open a second window.
+if [ -n "$EXISTING_WINDOW_PID" ]; then
+  if [ "$STARTED_BY_US" = "1" ]; then
+    while kill -0 "$EXISTING_WINDOW_PID" 2>/dev/null; do sleep 5; done
+    kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null
+  fi
+  exit 0
+fi
+
 if [ -x "$CHROME" ]; then
   # Point the profile's startup/homepage at the app URL. The app-mode Chrome
   # shows up in the Dock as "Google Chrome"; clicking that icon makes Chrome
   # think it has no browser windows and open a fresh one — these prefs make
   # that window load career-ops instead of a blank new-tab page.
-  if command -v node > /dev/null 2>&1; then
-    node -e '
-      const fs = require("fs"), path = require("path");
-      const [p, url] = process.argv.slice(1);
-      let j = {};
-      try { j = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
-      j.session = { ...(j.session || {}), restore_on_startup: 4, startup_urls: [url] };
-      j.homepage = url;
-      j.homepage_is_newtabpage = false;
-      fs.mkdirSync(path.dirname(p), { recursive: true });
-      fs.writeFileSync(p, JSON.stringify(j));
-    ' "$PROFILE/Default/Preferences" "$URL" 2>/dev/null
-  fi
+  # node is on PATH by now (prepended above; the server itself needs it too).
+  # Missing profile file = fresh profile (fine); any other read/parse error
+  # aborts without touching the profile. Write via tmp+rename so a crash can't
+  # leave Preferences half-written.
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const [p, url] = process.argv.slice(1);
+    let j = {};
+    try {
+      j = JSON.parse(fs.readFileSync(p, "utf8"));
+    } catch (e) {
+      if (e.code !== "ENOENT") { console.error("prefs unreadable, not seeding:", e.message); process.exit(1); }
+    }
+    j.session = { ...(j.session || {}), restore_on_startup: 4, startup_urls: [url] };
+    j.homepage = url;
+    j.homepage_is_newtabpage = false;
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const tmp = p + ".career-ops-tmp";
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(j));
+      fs.renameSync(tmp, p);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch {}
+      throw e;
+    }
+  ' "$PROFILE/Default/Preferences" "$URL" || echo "career-ops: prefs seeding failed (window still works; dock-click may show a blank tab)" >&2
   # Blocks until the app window is closed
   "$CHROME" --app="$URL" --user-data-dir="$PROFILE" --no-first-run --no-default-browser-check > /dev/null 2>&1
   if [ "$STARTED_BY_US" = "1" ]; then
