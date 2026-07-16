@@ -99,7 +99,7 @@ if ! healthy; then
   # leader, so cleanup can kill exactly its tree (next + children) and
   # nothing else — no pkill pattern matching.
   set -m
-  ./node_modules/.bin/next dev > /tmp/career-ops-web.log 2>&1 &
+  ./start-server.sh > /tmp/career-ops-web.log 2>&1 &
   SERVER_PID=$!
   set +m
   STARTED_BY_US=1

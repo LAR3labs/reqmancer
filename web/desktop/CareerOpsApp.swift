@@ -68,8 +68,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
                 if !up {
                     let p = Process()
                     p.executableURL = URL(fileURLWithPath: "/bin/bash")
-                    // exec: bash is replaced by next, so terminate() reaches next itself
-                    p.arguments = ["-c", "exec ./node_modules/.bin/next dev >> /tmp/career-ops-web.log 2>&1"]
+                    // start-server.sh serves the pre-built production bundle when fresh
+                    // (no dev-mode compile pauses) and falls back to `next dev` while
+                    // rebuilding in the background when the source changed. It execs the
+                    // chosen server, so terminate() reaches next itself.
+                    p.arguments = ["-c", "exec ./start-server.sh >> /tmp/career-ops-web.log 2>&1"]
                     p.currentDirectoryURL = URL(fileURLWithPath: webDir)
                     // GUI apps get a bare PATH without node; next's shebang is /usr/bin/env node
                     var env = ProcessInfo.processInfo.environment
