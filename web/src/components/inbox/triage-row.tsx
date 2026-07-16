@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Bookmark, BookmarkCheck, ExternalLink, Loader2, X } from "lucide-react";
+import { Banknote, Bookmark, BookmarkCheck, ExternalLink, Loader2, X } from "lucide-react";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_LABEL } from "@/lib/explore";
+import { formatSalary } from "@/lib/inbox";
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
 import { cn } from "@/lib/cn";
@@ -52,6 +53,10 @@ export function TriageRow({
   // you a role has been open for weeks even though it just hit your inbox.
   const postedAgo = agoLabel(postedAge);
   const foundAgo = agoLabel(foundAge);
+  // Advertised salary range (the row's optional 5th column) — another free signal.
+  // Shown honestly either way: a compact range when the posting lists one, an
+  // explicit "N/A" when it doesn't (absence of comp data IS a signal).
+  const salary = formatSalary(job.compensation);
   const evaluated = !!scored && (scored.running || scored.score != null);
 
   return (
@@ -92,6 +97,17 @@ export function TriageRow({
         </p>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
           {job.location && <span className="truncate">{job.location}</span>}
+          {salary ? (
+            <span title={`Advertised: ${job.compensation}`} className="inline-flex items-center gap-1 font-medium text-muted">
+              <Banknote className="size-3 shrink-0" />
+              {salary}
+            </span>
+          ) : (
+            <span title="No salary listed" className="inline-flex items-center gap-1">
+              <Banknote className="size-3 shrink-0" />
+              <span className="italic">N/A</span>
+            </span>
+          )}
           {source && <span className="rounded bg-surface-hover px-1 py-px font-medium text-muted">{ATS_LABEL[source]}</span>}
           {postedAgo && <span>posted {postedAgo}</span>}
           {foundAgo && <span>found {foundAgo}</span>}
