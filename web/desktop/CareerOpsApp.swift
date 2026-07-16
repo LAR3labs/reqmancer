@@ -124,9 +124,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
 
     // ── link handling: keep the app in the window, the web in the browser ───
 
+    private func isAppOrigin(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == appURL.scheme && url.host == appURL.host && url.port == appURL.port
+    }
+
+    // target=_blank / window.open: same allowlist as decidePolicyFor — app
+    // origin stays in this web view, external http(s) goes to the browser,
+    // anything else is dropped.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url { NSWorkspace.shared.open(url) }
+        if let url = navigationAction.request.url {
+            if isAppOrigin(url) {
+                webView.load(URLRequest(url: url))
+            } else if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                NSWorkspace.shared.open(url)
+            }
+        }
         return nil
     }
 
@@ -140,11 +153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
             decisionHandler(.cancel)
             return
         }
-        let scheme = url.scheme?.lowercased()
-        if scheme == appURL.scheme, url.host == appURL.host, url.port == appURL.port {
+        if isAppOrigin(url) {
             decisionHandler(.allow)
             return
         }
+        let scheme = url.scheme?.lowercased()
         if url.absoluteString == "about:blank" {
             decisionHandler(.allow)
             return

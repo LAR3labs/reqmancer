@@ -20,12 +20,13 @@ PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
 # Without this, relaunching the .app opened a duplicate/blank Chrome window.
 # Detection must not depend on Accessibility permission: record the PID from
 # pgrep alone (single-instance logic keys off it), focus is best-effort only.
-EXISTING_WINDOW_PID=""
-for pid in $(pgrep -f -- "--user-data-dir=$PROFILE" 2>/dev/null); do
-  EXISTING_WINDOW_PID="$pid"
-  osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $pid) to true" > /dev/null 2>&1 || true
-  break
-done
+# The pattern anchors on the main browser binary ("…MacOS/Google Chrome --…")
+# so helper processes ("…Google Chrome Helper --type=…") can't be selected —
+# the window-owning process is the one whose lifetime we track with kill -0.
+EXISTING_WINDOW_PID="$(pgrep -f -- "MacOS/Google Chrome --.*--user-data-dir=$PROFILE" 2>/dev/null | head -1)"
+if [ -n "$EXISTING_WINDOW_PID" ]; then
+  osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $EXISTING_WINDOW_PID) to true" > /dev/null 2>&1 || true
+fi
 
 # Only short-circuit when the server is actually serving — if it crashed while
 # the window stayed open, fall through and restart it before returning.
@@ -43,10 +44,18 @@ if ! curl -s -o /dev/null --max-time 2 "$URL"; then
   SERVER_PID=$!
   set +m
   STARTED_BY_US=1
+  READY=0
   for i in $(seq 1 45); do
     sleep 2
-    curl -s -o /dev/null --max-time 2 "$URL" && break
+    if curl -fsS -o /dev/null --max-time 2 "$URL" 2>/dev/null; then READY=1; break; fi
   done
+  # Fail closed: a window pointing at a dead server helps nobody — clean up
+  # the process group we spawned and report instead.
+  if [ "$READY" != "1" ]; then
+    echo "career-ops: server did not become ready — see /tmp/career-ops-web.log" >&2
+    kill -- "-$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null
+    exit 1
+  fi
 fi
 
 # Window already open (server was down and got restarted above): nudge it off
@@ -92,7 +101,7 @@ if [ -x "$CHROME" ]; then
     j.homepage = url;
     j.homepage_is_newtabpage = false;
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    const tmp = p + ".career-ops-tmp";
+    const tmp = `${p}.${process.pid}.career-ops-tmp`;
     try {
       fs.writeFileSync(tmp, JSON.stringify(j));
       fs.renameSync(tmp, p);
