@@ -87,7 +87,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
         {!isAdded && (
           <button
             type="button"
-            disabled={isDismissing}
+            disabled={isDismissing || isAdding}
             onClick={() => void dismiss([offer])}
             title="Not interested — hide this posting from every future scan"
             aria-label="Not interested"
@@ -141,7 +141,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={isAdded || isAdding}
+              disabled={isAdded || isAdding || isDismissing}
               onClick={() => addToPipeline([offer])}
               className={cn(
                 "inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-2 text-xs font-medium transition-colors max-sm:min-h-[44px]",
@@ -153,9 +153,10 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
             </button>
             <button
               type="button"
+              disabled={isDismissing}
               onClick={evaluate}
               title={unverified ? "Runs a real evaluation — and verifies the posting is live. Uses tokens." : "Runs a real A–F evaluation. Uses tokens."}
-              className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-brand/30 px-2.5 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand-soft max-sm:min-h-[44px]"
+              className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-brand/30 px-2.5 py-2 text-xs font-medium text-brand transition-colors hover:bg-brand-soft disabled:opacity-50 max-sm:min-h-[44px]"
             >
               Evaluate <Coins className="size-3.5 opacity-80" />
             </button>

@@ -18,6 +18,16 @@ import type { DiscoveredOffer } from "./scan";
  */
 export type AddResult = { added: number; error?: string };
 
+// ISO YYYY-MM-DD → epoch ms at UTC midnight. Shape alone isn't enough: Date.parse
+// rolls non-calendar dates like 2024-02-31 into a different day, so require the
+// parsed value to round-trip back to the original string.
+function postedAtMs(postedAt: unknown): number | undefined {
+  if (typeof postedAt !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(postedAt)) return undefined;
+  const ms = Date.parse(`${postedAt}T00:00:00Z`);
+  if (Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== postedAt) return undefined;
+  return ms;
+}
+
 function cleanOffers(offers: DiscoveredOffer[]) {
   return offers
     .filter((o) => o && typeof o.url === "string" && /^https?:\/\//i.test(o.url))
@@ -30,10 +40,7 @@ function cleanOffers(offers: DiscoveredOffer[]) {
       // Preserve the provider's posting date so formatPipelineOffer can emit its
       // labeled `posted:` segment. The core writer expects epoch ms (see
       // postedAtIsoDate in scan.mjs); DiscoveredOffer carries ISO YYYY-MM-DD.
-      postedAt:
-        typeof o.postedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.postedAt)
-          ? Date.parse(`${o.postedAt}T00:00:00Z`)
-          : undefined,
+      postedAt: postedAtMs(o.postedAt),
       // Preserve the optional per-offer signal so it survives to pipeline.md.
       // The core writer treats an empty note as absent (byte-identical output).
       note: o.note || "",

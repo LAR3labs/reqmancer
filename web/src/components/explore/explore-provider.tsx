@@ -526,7 +526,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* sessionStorage full/unavailable — non-fatal */
     }
-  }, [phase, mode, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources, partial, status, error, added, aiTrace, aiCost, aiIntent]);
+  }, [phase, mode, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources, partial, status, error, added, dismissed, aiTrace, aiCost, aiIntent]);
 
   const value = useMemo(
     () => ({
