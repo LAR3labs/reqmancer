@@ -9,6 +9,7 @@ import { HeroGlow } from "@/components/hero-glow";
 import type { Application, InboxJob } from "@/lib/career-ops";
 import type { DiscoveredOffer } from "@/lib/explore";
 import { DiscoveryCard } from "@/components/explore/discovery-card";
+import { useExplore } from "@/components/explore/explore-provider";
 import { FollowUpCard, type FollowUp } from "@/components/home/follow-up-card";
 import { DecisionCard } from "@/components/home/decision-card";
 import { QuickEvaluate } from "@/components/quick-evaluate";
@@ -29,7 +30,11 @@ export function TodayDashboard({
 }) {
   const [followups, setFollowups] = useState<FollowUp[]>([]);
   const [overdue, setOverdue] = useState(0);
-  const [fresh, setFresh] = useState<DiscoveredOffer[]>([]);
+  const [freshRaw, setFreshRaw] = useState<DiscoveredOffer[]>([]);
+  const { dismissed } = useExplore();
+  // Dismissed ("Not interested") drops the card immediately; the scan-history
+  // record keeps it out of the next /api/whats-new response too.
+  const fresh = useMemo(() => freshRaw.filter((o) => !dismissed.has(o.url)), [freshRaw, dismissed]);
   const router = useRouter();
   const dateLabel = useMemo(() => new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }), []);
 
@@ -43,7 +48,7 @@ export function TodayDashboard({
       .catch(() => {});
     fetch("/api/whats-new")
       .then((r) => r.json())
-      .then((d) => setFresh(Array.isArray(d.offers) ? d.offers : []))
+      .then((d) => setFreshRaw(Array.isArray(d.offers) ? d.offers : []))
       .catch(() => {});
   }, []);
 

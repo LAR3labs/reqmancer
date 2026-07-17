@@ -59,8 +59,11 @@ type ExploreCtx = {
   error: string;
   added: Set<string>;
   adding: Set<string>;
+  dismissed: Set<string>;
+  dismissing: Set<string>;
   discover: () => Promise<void>;
   addToPipeline: (offers: DiscoveredOffer[]) => Promise<number>;
+  dismiss: (offers: DiscoveredOffer[]) => Promise<number>;
   applyPatch: (raw: Record<string, unknown>, opts?: { merge?: boolean; run?: boolean }) => void;
   reset: () => void;
   // ── AI search (modes/discover.md) ──
@@ -99,6 +102,7 @@ type ResultSnapshot = {
   status: string;
   error: string;
   added: string[];
+  dismissed?: string[];
   aiTrace: AiTraceChunk[];
   aiCost: AiCost;
   aiIntent: string;
@@ -123,6 +127,8 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState("");
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissing, setDismissing] = useState<Set<string>>(new Set());
   const [mode, setModeState] = useState<ExploreMode>("scan");
   const [aiIntent, setAiIntent] = useState("");
   const [aiTrace, setAiTrace] = useState<AiTraceChunk[]>([]);
@@ -278,8 +284,26 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Atomic per-URL action claim shared by add + dismiss. The `added`/`dismissed`
+  // Sets are React state and land a render later, so two rapid actions (card
+  // button + "Add all", or add racing dismiss) could both pass those filters and
+  // persist contradictory statuses. The ref is mutated synchronously BEFORE any
+  // await, so exactly one caller wins each URL; losers get it back only if the
+  // winner's request fails (release), keeping retry possible.
+  const claimedRef = useRef<Set<string>>(new Set());
+  const releaseClaims = useCallback((list: DiscoveredOffer[]) => {
+    for (const o of list) claimedRef.current.delete(o.url);
+  }, []);
+
   const addToPipeline = useCallback(async (list: DiscoveredOffer[]) => {
-    const fresh = list.filter((o) => !added.has(o.url));
+    // Claim DURING selection (not after) so a duplicate URL within one list
+    // can't pass the filter twice before the claim loop runs.
+    const fresh: DiscoveredOffer[] = [];
+    for (const o of list) {
+      if (added.has(o.url) || dismissed.has(o.url) || claimedRef.current.has(o.url)) continue;
+      claimedRef.current.add(o.url);
+      fresh.push(o);
+    }
     if (fresh.length === 0) return 0;
     setAdding((s) => new Set([...s, ...fresh.map((o) => o.url)]));
     try {
@@ -288,9 +312,16 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offers: fresh }),
       });
-      const d = (await r.json()) as { added?: number };
-      if (d.added && d.added > 0) {
-        setAdded((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+      const d = (await r.json()) as { added?: number; urls?: string[] };
+      if (!d.added || d.added <= 0) {
+        releaseClaims(fresh);
+      } else {
+        // The writer sanitizes offers (invalid entries dropped), so settle
+        // per-URL from its acknowledgement: mark only accepted URLs as added
+        // and release the rest instead of leaving them claimed forever.
+        const ok = new Set(Array.isArray(d.urls) ? d.urls : fresh.map((o) => o.url));
+        releaseClaims(fresh.filter((o) => !ok.has(o.url)));
+        setAdded((s) => new Set([...s, ...fresh.filter((o) => ok.has(o.url)).map((o) => o.url)]));
         // The new inbox rows were written server-side. Invalidate the Next router
         // cache so the (server-rendered) Pipeline view shows them instead of a stale
         // snapshot, and ping live listeners (today's dashboard, pipeline provider) —
@@ -302,6 +333,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       }
       return d.added ?? 0;
     } catch {
+      releaseClaims(fresh);
       return 0;
     } finally {
       setAdding((s) => {
@@ -310,7 +342,47 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [added, router]);
+  }, [added, dismissed, releaseClaims, router]);
+
+  // "Not interested" — records the URLs as dismissed in scan-history so no future
+  // scan (free, AI, or What's-new) resurfaces them. Never touches pipeline.md.
+  const dismiss = useCallback(async (list: DiscoveredOffer[]) => {
+    // Same claim-during-selection as addToPipeline (see comment there).
+    const fresh: DiscoveredOffer[] = [];
+    for (const o of list) {
+      if (dismissed.has(o.url) || added.has(o.url) || claimedRef.current.has(o.url)) continue;
+      claimedRef.current.add(o.url);
+      fresh.push(o);
+    }
+    if (fresh.length === 0) return 0;
+    setDismissing((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+    try {
+      const r = await fetch("/api/explore/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offers: fresh }),
+      });
+      const d = (await r.json()) as { dismissed?: number; urls?: string[] };
+      if (d.dismissed && d.dismissed > 0) {
+        // Per-URL acknowledgement, same as addToPipeline.
+        const ok = new Set(Array.isArray(d.urls) ? d.urls : fresh.map((o) => o.url));
+        releaseClaims(fresh.filter((o) => !ok.has(o.url)));
+        setDismissed((s) => new Set([...s, ...fresh.filter((o) => ok.has(o.url)).map((o) => o.url)]));
+      } else {
+        releaseClaims(fresh);
+      }
+      return d.dismissed ?? 0;
+    } catch {
+      releaseClaims(fresh);
+      return 0;
+    } finally {
+      setDismissing((s) => {
+        const next = new Set(s);
+        for (const o of fresh) next.delete(o.url);
+        return next;
+      });
+    }
+  }, [dismissed, added, releaseClaims]);
 
   const applyPatch = useCallback((raw: Record<string, unknown>, opts?: { merge?: boolean; run?: boolean }) => {
     const next = parseExplorePatch(raw, filtersRef.current, opts?.merge ?? false);
@@ -470,6 +542,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setStatus(typeof snap.status === "string" ? snap.status : "");
     setError(typeof snap.error === "string" ? snap.error : "");
     setAdded(new Set(Array.isArray(snap.added) ? snap.added : []));
+    setDismissed(new Set(Array.isArray(snap.dismissed) ? snap.dismissed : []));
     setAiTrace(Array.isArray(snap.aiTrace) ? snap.aiTrace : []);
     setAiCost(snap.aiCost ?? { searches: 0, candidates: 0, fetches: 0 });
     if (typeof snap.aiIntent === "string") setAiIntent(snap.aiIntent);
@@ -485,23 +558,23 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     try {
       const snap: ResultSnapshot = {
         v: 1, mode, phase, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources,
-        partial, status, error, added: [...added], aiTrace, aiCost, aiIntent,
+        partial, status, error, added: [...added], dismissed: [...dismissed], aiTrace, aiCost, aiIntent,
       };
       sessionStorage.setItem(RESULTS_KEY, JSON.stringify(snap));
     } catch {
       /* sessionStorage full/unavailable — non-fatal */
     }
-  }, [phase, mode, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources, partial, status, error, added, aiTrace, aiCost, aiIntent]);
+  }, [phase, mode, offers, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, sources, partial, status, error, added, dismissed, aiTrace, aiCost, aiIntent]);
 
   const value = useMemo(
     () => ({
       filters, setFilters, initFilters, phase,
       running: phase === "casting" || phase === "scanning" || phase === "revealing" || phase === "hunting",
-      offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding,
-      discover, addToPipeline, applyPatch, reset,
+      offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing,
+      discover, addToPipeline, dismiss, applyPatch, reset,
       mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
     }),
-    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, discover, addToPipeline, applyPatch, reset, mode, setMode, aiIntent, discoverAI, aiTrace, aiCost],
+    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing, discover, addToPipeline, dismiss, applyPatch, reset, mode, setMode, aiIntent, discoverAI, aiTrace, aiCost],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

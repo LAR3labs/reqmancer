@@ -26,10 +26,18 @@ export async function GET(req: Request) {
   // Companies already evaluated → don't resurface as "new".
   const evaluated = new Set(readApplications().map((a) => norm(a.company)).filter(Boolean));
 
+  // A dismissal/skip is a LATER row for the same URL (the history is append-only),
+  // so the block must apply per-URL across all rows — not just the row's own status.
+  const blocked = new Set<string>();
+  for (let i = 1; i < rows.length; i++) {
+    const [url, , , , , status] = rows[i].split("\t");
+    if (url && status && /skipped|expired|dismissed/i.test(status)) blocked.add(url);
+  }
+
   const toOffer = (c: string[]): DiscoveredOffer | null => {
     const [url, firstSeen, portal, title, company, status, location] = c;
     if (!url || !/^https?:\/\//i.test(url)) return null;
-    if (status && /skipped|expired/i.test(status)) return null;
+    if (blocked.has(url) || (status && /skipped|expired/i.test(status))) return null;
     if (company && evaluated.has(norm(company))) return null;
     return {
       url,

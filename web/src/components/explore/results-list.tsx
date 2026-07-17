@@ -11,29 +11,38 @@ import { useExplore } from "./explore-provider";
 export type EnrichedOffer = DiscoveredOffer & { inPipeline: boolean; evaluatedN?: string };
 
 export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
-  const { companiesScanned, partial, addToPipeline, added, mode } = useExplore();
+  const { companiesScanned, partial, addToPipeline, added, dismissed, dismissing, mode } = useExplore();
   const isAi = mode === "ai";
   const [sort, setSort] = useState<"fresh" | "company">("fresh");
   const [q, setQ] = useState("");
 
+  // Dismissed ("Not interested") postings drop out of the list immediately —
+  // including ones still in flight (optimistic: a failed request clears
+  // `dismissing`, so the card comes back). The server-side record keeps them
+  // out of every FUTURE scan.
+  const visible = useMemo(
+    () => offers.filter((o) => !dismissed.has(o.url) && !dismissing.has(o.url)),
+    [offers, dismissed, dismissing],
+  );
+
   const view = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    let list = offers;
+    let list = visible;
     if (needle) list = list.filter((o) => o.title.toLowerCase().includes(needle) || o.company.toLowerCase().includes(needle));
     const sorted = [...list].sort((a, b) =>
       sort === "fresh" ? (b.postedAt || "").localeCompare(a.postedAt || "") : a.company.localeCompare(b.company),
     );
     return sorted;
-  }, [offers, q, sort]);
+  }, [visible, q, sort]);
 
-  const addable = offers.filter((o) => !o.inPipeline && !o.evaluatedN && !added.has(o.url));
+  const addable = visible.filter((o) => !o.inPipeline && !o.evaluatedN && !added.has(o.url));
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <p className="text-sm text-foreground">
-            <span className="font-semibold">{offers.length}</span> {isAi ? `candidate${offers.length === 1 ? "" : "s"}` : `fresh role${offers.length === 1 ? "" : "s"}`}
+            <span className="font-semibold">{visible.length}</span> {isAi ? `candidate${visible.length === 1 ? "" : "s"}` : `fresh role${visible.length === 1 ? "" : "s"}`}
             <CostBadge kind={isAi ? "spend" : "free-network"} size="xs" className="ml-2 align-middle" />
           </p>
           <p className="text-[12px] text-faint">
@@ -83,7 +92,15 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
         ))}
       </div>
 
-      {view.length === 0 && <p className="py-10 text-center text-sm text-faint">No results match “{q}”.</p>}
+      {view.length === 0 && (
+        <p className="py-10 text-center text-sm text-faint">
+          {q.trim()
+            ? `No results match “${q}”.`
+            : offers.some((o) => dismissing.has(o.url))
+              ? "Dismissing…"
+              : "Nothing left here — every posting was added or dismissed."}
+        </p>
+      )}
     </div>
   );
 }
