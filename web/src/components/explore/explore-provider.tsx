@@ -296,9 +296,15 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addToPipeline = useCallback(async (list: DiscoveredOffer[]) => {
-    const fresh = list.filter((o) => !added.has(o.url) && !dismissed.has(o.url) && !claimedRef.current.has(o.url));
+    // Claim DURING selection (not after) so a duplicate URL within one list
+    // can't pass the filter twice before the claim loop runs.
+    const fresh: DiscoveredOffer[] = [];
+    for (const o of list) {
+      if (added.has(o.url) || dismissed.has(o.url) || claimedRef.current.has(o.url)) continue;
+      claimedRef.current.add(o.url);
+      fresh.push(o);
+    }
     if (fresh.length === 0) return 0;
-    for (const o of fresh) claimedRef.current.add(o.url);
     setAdding((s) => new Set([...s, ...fresh.map((o) => o.url)]));
     try {
       const r = await fetch("/api/explore/add", {
@@ -306,11 +312,16 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offers: fresh }),
       });
-      const d = (await r.json()) as { added?: number };
+      const d = (await r.json()) as { added?: number; urls?: string[] };
       if (!d.added || d.added <= 0) {
         releaseClaims(fresh);
       } else {
-        setAdded((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+        // The writer sanitizes offers (invalid entries dropped), so settle
+        // per-URL from its acknowledgement: mark only accepted URLs as added
+        // and release the rest instead of leaving them claimed forever.
+        const ok = new Set(Array.isArray(d.urls) ? d.urls : fresh.map((o) => o.url));
+        releaseClaims(fresh.filter((o) => !ok.has(o.url)));
+        setAdded((s) => new Set([...s, ...fresh.filter((o) => ok.has(o.url)).map((o) => o.url)]));
         // The new inbox rows were written server-side. Invalidate the Next router
         // cache so the (server-rendered) Pipeline view shows them instead of a stale
         // snapshot, and ping live listeners (today's dashboard, pipeline provider) —
@@ -336,9 +347,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   // "Not interested" — records the URLs as dismissed in scan-history so no future
   // scan (free, AI, or What's-new) resurfaces them. Never touches pipeline.md.
   const dismiss = useCallback(async (list: DiscoveredOffer[]) => {
-    const fresh = list.filter((o) => !dismissed.has(o.url) && !added.has(o.url) && !claimedRef.current.has(o.url));
+    // Same claim-during-selection as addToPipeline (see comment there).
+    const fresh: DiscoveredOffer[] = [];
+    for (const o of list) {
+      if (dismissed.has(o.url) || added.has(o.url) || claimedRef.current.has(o.url)) continue;
+      claimedRef.current.add(o.url);
+      fresh.push(o);
+    }
     if (fresh.length === 0) return 0;
-    for (const o of fresh) claimedRef.current.add(o.url);
     setDismissing((s) => new Set([...s, ...fresh.map((o) => o.url)]));
     try {
       const r = await fetch("/api/explore/dismiss", {
@@ -346,9 +362,12 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offers: fresh }),
       });
-      const d = (await r.json()) as { dismissed?: number };
+      const d = (await r.json()) as { dismissed?: number; urls?: string[] };
       if (d.dismissed && d.dismissed > 0) {
-        setDismissed((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+        // Per-URL acknowledgement, same as addToPipeline.
+        const ok = new Set(Array.isArray(d.urls) ? d.urls : fresh.map((o) => o.url));
+        releaseClaims(fresh.filter((o) => !ok.has(o.url)));
+        setDismissed((s) => new Set([...s, ...fresh.filter((o) => ok.has(o.url)).map((o) => o.url)]));
       } else {
         releaseClaims(fresh);
       }

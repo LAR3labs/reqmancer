@@ -94,7 +94,11 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
 
       {view.length === 0 && (
         <p className="py-10 text-center text-sm text-faint">
-          {q.trim() ? `No results match “${q}”.` : "Nothing left here — every posting was added or dismissed."}
+          {q.trim()
+            ? `No results match “${q}”.`
+            : offers.some((o) => dismissing.has(o.url))
+              ? "Dismissing…"
+              : "Nothing left here — every posting was added or dismissed."}
         </p>
       )}
     </div>

@@ -30,5 +30,5 @@ export async function POST(req: NextRequest) {
   if (offers.length === 0) return Response.json({ dismissed: 0 });
 
   const result = await dismissOffers(offers);
-  return Response.json({ dismissed: result.added, error: result.error });
+  return Response.json({ dismissed: result.added, urls: result.urls ?? [], error: result.error });
 }

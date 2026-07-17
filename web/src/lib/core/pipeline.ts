@@ -16,7 +16,9 @@ import type { DiscoveredOffer } from "./scan";
  * Discovered-but-not-added offers stay "new" (a dry-run scan writes nothing);
  * only an explicit add records them as seen. No tokens are spent here.
  */
-export type AddResult = { added: number; error?: string };
+// `urls` = the offers the writer actually accepted (cleanOffers drops invalid
+// entries), so callers can settle per-URL state instead of trusting the count.
+export type AddResult = { added: number; urls?: string[]; error?: string };
 
 // ISO YYYY-MM-DD → epoch ms at UTC midnight. Shape alone isn't enough: Date.parse
 // rolls non-calendar dates like 2024-02-31 into a different day, so require the
@@ -104,7 +106,10 @@ process.stdin.on("end", () => {
     child.on("close", () => {
       try {
         const parsed = JSON.parse(out.trim() || "{}") as AddResult;
-        resolve({ added: parsed.added ?? 0, error: parsed.error });
+        const added = parsed.added ?? 0;
+        // The writer is all-or-nothing per request: success means every offer
+        // in `clean` was written.
+        resolve({ added, urls: added > 0 ? clean.map((o) => o.url) : [], error: parsed.error });
       } catch {
         resolve({ added: 0, error: err.trim().slice(0, 200) || "writer returned no result" });
       }
