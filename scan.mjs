@@ -1149,6 +1149,7 @@ const PORTAL_HEALTH_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)
 export const PORTAL_HEALTH_HEADER = 'timestamp\tcompany\tstatus\n';
 
 export function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH_PATH) {
+  mkdirSync(path.dirname(filePath), { recursive: true });
   if (!existsSync(filePath)) writeFileSync(filePath, PORTAL_HEALTH_HEADER, 'utf-8');
   let lines = '';
   for (const r of healthRecords) {
@@ -1786,7 +1787,10 @@ async function main() {
   const networkTargets = errors.filter((e) => e.kind === 'network');
   const otherErrors = errors.filter((e) => e.kind !== 'slug_gone' && e.kind !== 'network');
   
-  const STREAK_THRESHOLD = config.portal_health_threshold || 3;
+  const configuredThreshold = Number(config.portal_health_threshold);
+  const STREAK_THRESHOLD = Number.isInteger(configuredThreshold) && configuredThreshold > 0
+    ? configuredThreshold
+    : 3;
   const nowStr = new Date().toISOString();
   const healthRecords = [];
   
