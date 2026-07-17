@@ -11,14 +11,19 @@ import { useExplore } from "./explore-provider";
 export type EnrichedOffer = DiscoveredOffer & { inPipeline: boolean; evaluatedN?: string };
 
 export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
-  const { companiesScanned, partial, addToPipeline, added, dismissed, mode } = useExplore();
+  const { companiesScanned, partial, addToPipeline, added, dismissed, dismissing, mode } = useExplore();
   const isAi = mode === "ai";
   const [sort, setSort] = useState<"fresh" | "company">("fresh");
   const [q, setQ] = useState("");
 
   // Dismissed ("Not interested") postings drop out of the list immediately —
-  // the server-side record keeps them out of every FUTURE scan.
-  const visible = useMemo(() => offers.filter((o) => !dismissed.has(o.url)), [offers, dismissed]);
+  // including ones still in flight (optimistic: a failed request clears
+  // `dismissing`, so the card comes back). The server-side record keeps them
+  // out of every FUTURE scan.
+  const visible = useMemo(
+    () => offers.filter((o) => !dismissed.has(o.url) && !dismissing.has(o.url)),
+    [offers, dismissed, dismissing],
+  );
 
   const view = useMemo(() => {
     const needle = q.trim().toLowerCase();

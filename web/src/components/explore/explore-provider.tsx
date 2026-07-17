@@ -284,9 +284,21 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Atomic per-URL action claim shared by add + dismiss. The `added`/`dismissed`
+  // Sets are React state and land a render later, so two rapid actions (card
+  // button + "Add all", or add racing dismiss) could both pass those filters and
+  // persist contradictory statuses. The ref is mutated synchronously BEFORE any
+  // await, so exactly one caller wins each URL; losers get it back only if the
+  // winner's request fails (release), keeping retry possible.
+  const claimedRef = useRef<Set<string>>(new Set());
+  const releaseClaims = useCallback((list: DiscoveredOffer[]) => {
+    for (const o of list) claimedRef.current.delete(o.url);
+  }, []);
+
   const addToPipeline = useCallback(async (list: DiscoveredOffer[]) => {
-    const fresh = list.filter((o) => !added.has(o.url));
+    const fresh = list.filter((o) => !added.has(o.url) && !dismissed.has(o.url) && !claimedRef.current.has(o.url));
     if (fresh.length === 0) return 0;
+    for (const o of fresh) claimedRef.current.add(o.url);
     setAdding((s) => new Set([...s, ...fresh.map((o) => o.url)]));
     try {
       const r = await fetch("/api/explore/add", {
@@ -295,7 +307,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ offers: fresh }),
       });
       const d = (await r.json()) as { added?: number };
-      if (d.added && d.added > 0) {
+      if (!d.added || d.added <= 0) {
+        releaseClaims(fresh);
+      } else {
         setAdded((s) => new Set([...s, ...fresh.map((o) => o.url)]));
         // The new inbox rows were written server-side. Invalidate the Next router
         // cache so the (server-rendered) Pipeline view shows them instead of a stale
@@ -308,6 +322,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       }
       return d.added ?? 0;
     } catch {
+      releaseClaims(fresh);
       return 0;
     } finally {
       setAdding((s) => {
@@ -316,13 +331,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [added, router]);
+  }, [added, dismissed, releaseClaims, router]);
 
   // "Not interested" — records the URLs as dismissed in scan-history so no future
   // scan (free, AI, or What's-new) resurfaces them. Never touches pipeline.md.
   const dismiss = useCallback(async (list: DiscoveredOffer[]) => {
-    const fresh = list.filter((o) => !dismissed.has(o.url) && !added.has(o.url));
+    const fresh = list.filter((o) => !dismissed.has(o.url) && !added.has(o.url) && !claimedRef.current.has(o.url));
     if (fresh.length === 0) return 0;
+    for (const o of fresh) claimedRef.current.add(o.url);
     setDismissing((s) => new Set([...s, ...fresh.map((o) => o.url)]));
     try {
       const r = await fetch("/api/explore/dismiss", {
@@ -333,9 +349,12 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       const d = (await r.json()) as { dismissed?: number };
       if (d.dismissed && d.dismissed > 0) {
         setDismissed((s) => new Set([...s, ...fresh.map((o) => o.url)]));
+      } else {
+        releaseClaims(fresh);
       }
       return d.dismissed ?? 0;
     } catch {
+      releaseClaims(fresh);
       return 0;
     } finally {
       setDismissing((s) => {
@@ -344,7 +363,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     }
-  }, [dismissed, added]);
+  }, [dismissed, added, releaseClaims]);
 
   const applyPatch = useCallback((raw: Record<string, unknown>, opts?: { merge?: boolean; run?: boolean }) => {
     const next = parseExplorePatch(raw, filtersRef.current, opts?.merge ?? false);
