@@ -1150,10 +1150,18 @@ export const PORTAL_HEALTH_HEADER = 'timestamp\tcompany\tstatus\n';
 
 export function appendPortalHealth(healthRecords, filePath = PORTAL_HEALTH_PATH) {
   mkdirSync(path.dirname(filePath), { recursive: true });
-  if (!existsSync(filePath)) writeFileSync(filePath, PORTAL_HEALTH_HEADER, 'utf-8');
+  try {
+    // 'wx' fails if the file exists — atomic header creation, so two
+    // concurrent scans can't both "create" the file and truncate rows.
+    writeFileSync(filePath, PORTAL_HEALTH_HEADER, { encoding: 'utf-8', flag: 'wx' });
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err;
+  }
   let lines = '';
   for (const r of healthRecords) {
-    lines += [r.timestamp, r.company, r.status].join('\t') + '\n';
+    // Tabs/newlines in a company name would shift TSV columns on read-back.
+    const company = String(r.company).replace(/[\t\r\n]+/g, ' ');
+    lines += [r.timestamp, company, r.status].join('\t') + '\n';
   }
   if (lines) appendFileSync(filePath, lines, 'utf-8');
 }
@@ -1786,6 +1794,10 @@ async function main() {
   const unreachableTargets = errors.filter((e) => e.kind === 'slug_gone');
   const networkTargets = errors.filter((e) => e.kind === 'network');
   const otherErrors = errors.filter((e) => e.kind !== 'slug_gone' && e.kind !== 'network');
+  // Fatal per-target fetch failures carry a `kind` from classifyFetchError
+  // (auth/server/unknown here). Entries WITHOUT `kind` are non-fatal notes
+  // (resolve warnings, local-parser API fallbacks) — the target still scanned.
+  const fatalOtherTargets = errors.filter((e) => e.kind && e.kind !== 'slug_gone' && e.kind !== 'network');
   
   const configuredThreshold = Number(config.portal_health_threshold);
   const STREAK_THRESHOLD = Number.isInteger(configuredThreshold) && configuredThreshold > 0
@@ -1797,11 +1809,15 @@ async function main() {
   for (const t of targets) {
     const isUnreachable = unreachableTargets.some(e => e.company === t.name);
     const isNetwork = networkTargets.some(e => e.company === t.name);
+    const isFatalOther = fatalOtherTargets.some(e => e.company === t.name);
     const isEmpty = emptyTargets.includes(t.name);
-    
+
     let status = 'reachable';
     if (isUnreachable) status = 'slug_gone';
     else if (isNetwork) status = 'network';
+    // auth/server/unknown failures are NOT proof the portal is fine: persist
+    // 'error' so the streak is neither incremented nor reset by this run.
+    else if (isFatalOther) status = 'error';
     else if (isEmpty) status = 'empty';
     
     healthRecords.push({ timestamp: nowStr, company: t.name, status });
@@ -1897,8 +1913,11 @@ async function main() {
 
   // One-time-ever manifesto note: first successful REAL run only. The state
   // file keeps it from ever repeating; --dry-run must leave no trace, and a
-  // piped/quiet run is not the moment for it.
-  if (!dryRun && process.stdout.isTTY && !process.argv.includes('--quiet') && !existsSync('.manifesto-noted')) {
+  // piped/quiet run is not the moment for it. A run with per-target failures
+  // doesn't count as the "first successful run" — don't burn the one-shot.
+  const scanFullySucceeded = unreachableTargets.length === 0
+    && networkTargets.length === 0 && fatalOtherTargets.length === 0;
+  if (!dryRun && scanFullySucceeded && process.stdout.isTTY && !process.argv.includes('--quiet') && !existsSync('.manifesto-noted')) {
     // OSC 8 hyperlink where support is known, so the click attributes as
     // utm_source=cli while the visible text stays clean; otherwise print the
     // URL with the utm so typed visits attribute too.
