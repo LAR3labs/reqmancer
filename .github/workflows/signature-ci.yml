@@ -23,7 +23,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      # Un PR de firma cambia SOLO SIGNATURES.md. Si el PR toca más ficheros
+      # (p.ej. un merge de upstream que arrastra SIGNATURES.md), no es un PR
+      # de firma: se omite la validación y el job pasa en verde.
+      - name: Detect signature PR (SIGNATURES.md is the only change)
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          CHANGED=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          if [ "$CHANGED" = "SIGNATURES.md" ]; then
+            echo "signature=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signature=false" >> "$GITHUB_OUTPUT"
+            echo "Not a signature PR (changed files beyond SIGNATURES.md) — skipping validation."
+          fi
       - name: Validate diff shape + line format
+        if: steps.detect.outputs.signature == 'true'
         id: check
         env:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -57,7 +75,7 @@ jobs:
             console.log("shape OK");
           ' 2> /tmp/reason.txt || { cat /tmp/reason.txt >> "$GITHUB_OUTPUT"; exit 1; }
       - name: Friendly ack (valid)
-        if: success()
+        if: success() && steps.detect.outputs.signature == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -67,7 +85,7 @@ jobs:
               body: `Format valid. You're in the queue — signatures land in waves. Your line will live at https://career-ops.org/manifesto/s/${login}\n\nIf GitHub reports a merge conflict, do nothing; we handle it.`
             });
       - name: Friendly fix-it (invalid)
-        if: failure()
+        if: failure() && steps.detect.outputs.signature == 'true'
         uses: actions/github-script@v7
         with:
           script: |
