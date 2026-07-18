@@ -255,7 +255,7 @@ export function extractTrackerReportNumbers(reportCell) {
       || pathname.match(/(?:^|[\\/])0*(\d+)-[^\\/]*\.md$/i);
     if (!match) return null;
     const num = parseInt(match[1], 10);
-    return Number.isInteger(num) && num > 0 ? num : null;
+    return Number.isSafeInteger(num) && num > 0 ? num : null;
   };
 
   const markdownLinks = parseMarkdownLinks(value);
@@ -265,7 +265,7 @@ export function extractTrackerReportNumbers(reportCell) {
     const label = link.label.trim();
     if (/^\d+$/.test(label)) {
       const labelNum = parseInt(label, 10);
-      if (labelNum > 0) numbers.add(labelNum);
+      if (Number.isSafeInteger(labelNum) && labelNum > 0) numbers.add(labelNum);
     }
     numbers.add(pathNum);
   }

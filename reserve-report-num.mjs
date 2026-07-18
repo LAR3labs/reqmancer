@@ -182,13 +182,20 @@ export async function reserveReportNumbers(count = 1, options = {}) {
       }
       const claimed = [];
       let failedAt = null;
-      for (let num = base; num <= end; num++) {
-        if (claimSlot(reportsDir, num, occupied, token)) {
-          claimed.push(num);
-        } else {
-          failedAt = num;
-          break;
+      try {
+        for (let num = base; num <= end; num++) {
+          if (claimSlot(reportsDir, num, occupied, token)) {
+            claimed.push(num);
+          } else {
+            failedAt = num;
+            break;
+          }
         }
+      } catch (err) {
+        // A non-EEXIST write failure mid-range would otherwise strand the
+        // already-claimed sentinels until GC (they're owned by this token).
+        for (const num of claimed) releaseSlot(reportsDir, num, { token });
+        throw err;
       }
       if (failedAt == null) {
         Object.defineProperty(claimed, RESERVATION_TOKEN, { value: token });

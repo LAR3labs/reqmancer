@@ -262,15 +262,18 @@ export function computePortalStats(portalsYmlContent, scanStats, producingCompan
     }
     const streaks = new Map();
     for (const r of healthRecords) {
+      // Normalize the key: a capitalization change in the append-only history
+      // must not fork the streak (a later 'reachable' has to reset it).
+      const company = String(r.company).trim().toLowerCase();
       if (r.status === 'slug_gone' || r.status === 'network') {
-        streaks.set(r.company, (streaks.get(r.company) || 0) + 1);
+        streaks.set(company, (streaks.get(company) || 0) + 1);
       } else if (r.status === 'reachable' || r.status === 'empty') {
-        streaks.set(r.company, 0);
+        streaks.set(company, 0);
       }
     }
     const threshold = cfg.portal_health_threshold || 3;
     for (const [company, streak] of streaks.entries()) {
-      if (streak >= threshold && configuredNames.has(String(company).toLowerCase())) {
+      if (streak >= threshold && configuredNames.has(company)) {
         persistentlyDead++;
       }
     }

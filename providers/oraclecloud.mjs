@@ -265,6 +265,7 @@ export default {
 
     const all = [];
     let total = null;
+    let capExhausted = false;
     for (let page = 0; page < maxPages; page++) {
       const offset = page * PAGE_SIZE;
       const apiUrl = buildApiUrl(site, offset, PAGE_SIZE);
@@ -291,6 +292,12 @@ export default {
       //   - once we've paged past TotalJobsCount there's nothing left to fetch.
       if (listLen === 0 || listLen < PAGE_SIZE) break;
       if (total !== null && offset + PAGE_SIZE >= total) break;
+      if (page === maxPages - 1) capExhausted = true;
+    }
+    if (capExhausted) {
+      // Large tenants (JPMC: 7000+ jobs) exceed the default cap — never
+      // truncate silently; the fix is per-entry max_pages in portals.yml.
+      console.warn(`⚠️  oraclecloud: ${entry.name} hit the ${maxPages}-page cap at ${all.length} jobs${total !== null ? ` of ~${total}` : ''} — set max_pages in portals.yml to scan the rest`);
     }
     return all;
   },

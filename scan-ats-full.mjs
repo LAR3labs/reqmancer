@@ -605,7 +605,10 @@ async function main() {
           '',
           ...offers.map(o => {
             const posted = o.postedAt ? new Date(o.postedAt).toISOString().slice(0, 10) : 'n/a';
-            return `- [${o.title} @ ${o.company}](${o.url}) — ${o.location || 'N/A'} | ${o.source} | ${posted}`;
+            // --include-blacklisted lets these through for audit — the digest
+            // must carry the marker too, not just the console output.
+            const blSuffix = o.blacklisted ? ` | ⛔ ${o.note || 'blacklisted'}` : '';
+            return `- [${o.title} @ ${o.company}](${o.url}) — ${o.location || 'N/A'} | ${o.source} | ${posted}${blSuffix}`;
           }),
           '',
         ].join('\n');

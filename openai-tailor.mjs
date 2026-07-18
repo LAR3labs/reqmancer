@@ -120,7 +120,9 @@ const companySlug = match ? match[1] : 'unknown-company';
 
 // Extract role from report header (e.g., "# Evaluation: Company - Role Title")
 let roleSlug = 'role';
-const roleMatch = reportText.match(/^#\s+Evaluation:\s+[^-]+\s+-\s+(.+?)$/m);
+// Company matched lazily up to the first " - " WITH surrounding spaces, so
+// hyphenated names ("Acme-Corp") don't truncate the match at their hyphen.
+const roleMatch = reportText.match(/^#\s+Evaluation:\s+.+?\s+-\s+(.+)$/m);
 if (roleMatch && roleMatch[1]) {
   roleSlug = roleMatch[1]
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
