@@ -271,7 +271,12 @@ export function computePortalStats(portalsYmlContent, scanStats, producingCompan
         streaks.set(company, 0);
       }
     }
-    const threshold = cfg.portal_health_threshold || 3;
+    // Same validation as scan.mjs — the two persistentlyDead counts must not
+    // diverge on an invalid threshold (-1 flags every streak, "abc" hides all).
+    const configuredThreshold = Number(cfg.portal_health_threshold);
+    const threshold = Number.isInteger(configuredThreshold) && configuredThreshold > 0
+      ? configuredThreshold
+      : 3;
     for (const [company, streak] of streaks.entries()) {
       if (streak >= threshold && configuredNames.has(company)) {
         persistentlyDead++;
