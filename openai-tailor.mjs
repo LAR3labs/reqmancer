@@ -118,6 +118,16 @@ const reportFilename = basename(reportPath);
 const match = reportFilename.match(/^\d+-([a-z0-9-]+)-\d{4}-\d{2}-\d{2}\.md$/);
 const companySlug = match ? match[1] : 'unknown-company';
 
+// Extract role from report header (e.g., "# Evaluation: Company - Role Title")
+let roleSlug = 'role';
+// Company matched lazily up to the first " - " WITH surrounding spaces, so
+// hyphenated names ("Acme-Corp") don't truncate the match at their hyphen.
+const roleMatch = reportText.match(/^#\s+Evaluation:\s+.+?\s+-\s+(.+)$/m);
+if (roleMatch && roleMatch[1]) {
+  roleSlug = roleMatch[1]
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
 // ---------------------------------------------------------------------------
 // Endpoint + security guard.
 // ---------------------------------------------------------------------------
@@ -300,7 +310,7 @@ try {
   console.log(`\n✅  Tailored HTML saved: ${htmlPath}`);
 
   // Print next steps
-  const pdfFilename = `cv-${candidateName}-${companySlug}-${new Date().toISOString().split('T')[0]}.pdf`;
+  const pdfFilename = `cv-${candidateName}-${companySlug}-${roleSlug}-${new Date().toISOString().split('T')[0]}.pdf`;
   const reportNumMatch = reportFilename.match(/^(\d+)-/);
   const reportNum = reportNumMatch ? reportNumMatch[1] : '001';
 
