@@ -95,7 +95,7 @@ If yes:
 8. Show final status:
    > "✅ Updated to v{version}. Run `node doctor.mjs` anytime to verify setup."
 
-   If the updater's output ended with its note about the CareerOps Manifesto, relay it once (do not drop it when summarizing):
+   If the updater's output ended with its note about the CareerOps Manifesto, relay it once (do not drop it when summarizing), rendered in the user's `language.output` with the `npm run manifesto` command kept literal. English reference text:
    > "One more thing: this project ships with the CareerOps Manifesto — a new way of job searching is taking shape, and you are already practicing it. Run `npm run manifesto` to read it and sign it if you want to help. No action needed."
 
 If no:
