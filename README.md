@@ -434,7 +434,7 @@ career-ops runs on any major AI coding CLI — Claude Code, Codex, Gemini / Anti
 career-ops runs on Windows. If skills fail to load with a symlink error during install, the fix is in [docs/FAQ.md](docs/FAQ.md). Full steps are in [docs/SETUP.md](docs/SETUP.md).
 
 **Does career-ops auto-apply to jobs for me?**
-No. career-ops is a filter, not a spray-and-pray auto-applier. The AI evaluates, ranks and drafts; you review and decide. It never submits, sends, or clicks anything — you always have the final call. That human-in-the-loop design is the whole point.
+No. career-ops is a filter, not a spray-and-pray auto-applier. The AI evaluates, ranks and drafts; it can fill forms and navigate application pages, but it never submits or sends an application — the final click is always yours, after your review. That human-in-the-loop design is the whole point.
 
 **Is career-ops free and open source?**
 Yes. career-ops is free and open source, and for the candidate it always will be — it is the first reference implementation of the [CareerOps Manifesto](https://career-ops.org/manifesto). Read it, and if it says what you believe, sign it.

@@ -222,7 +222,7 @@ Batch rendering rules per row:
 | Posting legitimacy | Mirror the Block G tier: `✅ High Confidence`, or `⚠️ {tier} — {one-line reason}` |
 | Employment classification | `— not evaluated` (classification check is not part of batch Block G) |
 | Culture screen | `— not evaluated` (batch Block A does not produce the Culture screen pass/caution/fail field) |
-| Interview red flags | If `interview-prep/{company-slug}-redflags.md` exists, mirror its warning level + relative link `[{level}](../interview-prep/{company-slug}-redflags.md)`; if not, `— no interview sessions yet` |
+| Interview red flags | If `interview-prep/{company-slug}-redflags.md` exists, mirror its warning level + relative link `[{level}](../interview-prep/{company-slug}-redflags.md)`; if not, `— not evaluated` (a missing red-flags file only means no analysis was generated — it is NOT evidence that no interview sessions happened; never claim "no sessions yet" from file absence) |
 | AI claims vs. infrastructure | If this prompt/report contains the AI/infrastructure mismatch check, mirror its verdict (`✅ consistent` / `⚠️ {finding}`); if not, `— not evaluated` |
 
 Block format:
@@ -311,7 +311,7 @@ Rules:
 - `final_decision` must reflect the full evaluation, not only the CV match.
 - `advertised_comp` is the JD's **own** figure, verbatim; `null` when the JD states nothing — never estimate it and never substitute researched market data (Block D research stays in Block D). Batch workers never write `data/salary-observations.tsv` — the report itself is the advertised observation (`salary-gap.mjs` reads it).
 - Do not invent missing data. If confidence is limited, set `confidence: "Low"` and explain the limitation in the human-readable sections.
-- `risk_summary` mirrors the `## Risk Summary` block row by row — same source verdicts, snake_cased: `legitimacy` from the Block G tier (`high_confidence` / `proceed_with_caution` / `suspicious`), `culture` from the Block A Culture screen (`pass` / `caution` / `fail`), `interview_redflags` from the red-flag file's warning level (`none` / `caution` / `warning`). Any row rendered `— not evaluated` (or `— no interview sessions yet`) is `not_evaluated` here. Never invent a value the block does not show.
+- `risk_summary` mirrors the `## Risk Summary` block row by row — same source verdicts, snake_cased: `legitimacy` from the Block G tier (`high_confidence` / `proceed_with_caution` / `suspicious`), `classification` from the Employment-classification row (`clear` / `flagged` — batch renders it `— not evaluated`, so `not_evaluated`), `culture` from the Block A Culture screen (`pass` / `caution` / `fail`), `interview_redflags` from the red-flag file's warning level (`none` / `caution` / `warning`), `ai_infra` from the AI-claims-vs-infrastructure row (`consistent` / `mismatch`). Every key in the schema gets exactly one of its listed values: any row rendered `— not evaluated` is `not_evaluated` here. Never invent a value the block does not show, and never omit a key.
 
 ### Step 3 — Save the Report
 

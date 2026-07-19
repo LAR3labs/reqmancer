@@ -6,11 +6,22 @@ on:
   # (e.g. an expired/insufficient NPM_TOKEN), dispatch this workflow to publish
   # the scaffolder at its current version without cutting a new release.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to re-publish (e.g. career-ops-v1.21.0); checked out and verified against scaffolder/package.json before publishing"
+        required: true
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
   id-token: write
+
+# One publisher at a time: a manual recovery run must never overlap the
+# release-created run (competing `npm publish` attempts).
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
 
 jobs:
   release-please:
@@ -29,6 +40,18 @@ jobs:
       # `on: release` workflows.
       - uses: actions/checkout@v7
         if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        with:
+          # Dispatch runs publish the NAMED release tag, never whatever main
+          # happens to hold; release-created runs use the triggering sha.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || '' }}
+      - name: Verify dispatch tag matches scaffolder version
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          VER=$(node -p "require('./scaffolder/package.json').version")
+          [ "$TAG" = "career-ops-v$VER" ] || { echo "::error::tag $TAG does not match scaffolder version $VER (expected career-ops-v$VER)"; exit 1; }
       - uses: actions/setup-node@v6
         if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
         with:
