@@ -62,6 +62,8 @@ export async function POST(req: Request) {
     ? [
         "-p",
         prompt,
+        "--model",
+        "claude-fable-5",
         "--output-format",
         "stream-json",
         "--verbose",
