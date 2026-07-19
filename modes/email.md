@@ -334,7 +334,7 @@ Best regards,
 **Scope note:** this variant is unrelated to the elapsed-time cadence in
 `modes/followup.md` / `followup-cadence.mjs` (applied: 7 days, responded: 3
 days, interview: 1 day). Those track "it's been N days since the status
-changed." This variant is same-day and commitment-specific: a recruiter or
+changed." This variant is commitment-specific: a recruiter or
 interviewer explicitly confirmed a call time in a two-way exchange (email,
 ATS scheduler, text) and the call did not happen. There is no day-elapsed
 scoring here and no `followup-cadence.mjs` output to read — the trigger is
@@ -346,8 +346,10 @@ Required, always ask for whatever is missing (do not invent any of these):
 
 1. **The confirmed date/time**, as agreed in the exchange (include timezone
    if known).
-   Before drafting, verify that this time has passed and is today in the
-   relevant timezone; otherwise clarify the scenario or use another variant.
+   Before drafting, verify that this time has passed in the relevant
+   timezone; otherwise clarify the scenario or use another variant. A
+   confirmed no-show from a previous day is still valid here — only offer
+   same-day availability (intake item 3) when the missed slot was today.
 2. **The interviewer or recruiter's name**, exactly as given by the user —
    do not scrape or guess it from a report.
 3. **Remaining same-day availability** the user wants to offer (a window,

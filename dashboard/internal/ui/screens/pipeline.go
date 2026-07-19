@@ -111,6 +111,9 @@ type reportSummary struct {
 
 const storyTemplateURL = "https://github.com/santifer/career-ops/issues/new?template=i-got-hired.yml"
 
+// manifestoShortcutURL is the dashboard "m" shortcut link to the CareerOps manifesto.
+const manifestoShortcutURL = "https://career-ops.org/manifesto?utm_source=dashboard-shortcut"
+
 // Sort modes
 const (
 	sortScore    = "score"
@@ -549,7 +552,7 @@ func (m PipelineModel) handleKey(msg tea.KeyMsg) (PipelineModel, tea.Cmd) {
 
 	case "m":
 		return m, func() tea.Msg {
-			return PipelineOpenURLMsg{URL: "https://career-ops.org/manifesto?utm_source=dashboard-shortcut"}
+			return PipelineOpenURLMsg{URL: manifestoShortcutURL}
 		}
 
 	case "d":

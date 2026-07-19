@@ -24,7 +24,9 @@ under its own session — every line in this ledger is auditable, click by
 click. The `n:` field is the signature's permanent ordinal, frozen at merge
 time: if a line is ever removed (fraud, or a signer's right to vanish), its
 number is retired with it — numbers are never reassigned. (The foundational signature predates the ledger itself; its `src:`
-points to the manifesto at the founding tag.) Lines not starting with `- @` are ignored by the website renderer.
+points to the manifesto at the founding tag.)
+
+Lines not starting with `- @` are ignored by the website renderer.
 Signatures land in waves; yours will appear at
 https://career-ops.org/manifesto within minutes of merging, with a permanent
 personal card at `career-ops.org/manifesto/s/your-username`.
