@@ -85,10 +85,12 @@ export async function POST(req: Request) {
   // controller and throw an uncaught "Controller is already closed" (see #1155).
   let closed = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
       let emitted = false;
+      let lastSent = Date.now();
       killer = setTimeout(() => {
         try {
           child.kill("SIGTERM");
@@ -100,6 +102,7 @@ export async function POST(req: Request) {
         if (!closed) {
           closed = true;
           if (killer) clearTimeout(killer);
+          if (heartbeat) clearInterval(heartbeat);
           try {
             controller.close();
           } catch {
@@ -111,6 +114,7 @@ export async function POST(req: Request) {
         if (closed || !s) return false;
         try {
           controller.enqueue(encoder.encode(s));
+          lastSent = Date.now();
           return true;
         } catch {
           closed = true; // controller already closed underneath us — stop, never crash
@@ -120,6 +124,21 @@ export async function POST(req: Request) {
       const emit = (s: string) => {
         if (safeEnqueue(s)) emitted = true;
       };
+
+      // WebKit (Safari / the desktop app's WKWebView) fails the whole fetch with
+      // a generic "Load failed" if the RESPONSE stays silent too long: headers
+      // don't flush until the first body byte, and NSURLSession's idle timeout
+      // (~60s) then kills the request — which an AI hunt trips easily during its
+      // opening web-search phase (stream-json events flow on stdout, but only
+      // text deltas are forwarded). Flush a byte immediately and keep the pipe
+      // warm whenever nothing has been SENT for a while. Whitespace-only chunks
+      // are invisible to the client parser; gating on sent-idle keeps a
+      // heartbeat from ever landing inside a split <<offer:…>> envelope (text
+      // deltas mid-envelope reset the timer as they're forwarded).
+      safeEnqueue("\n");
+      heartbeat = setInterval(() => {
+        if (!closed && Date.now() - lastSent >= 15_000) safeEnqueue("\n");
+      }, 15_000);
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
@@ -162,6 +181,7 @@ export async function POST(req: Request) {
     cancel() {
       closed = true;
       if (killer) clearTimeout(killer);
+      if (heartbeat) clearInterval(heartbeat);
       try {
         child.kill("SIGTERM");
       } catch {
