@@ -98,11 +98,18 @@ export async function POST(req: Request) {
           /* ignore */
         }
       }, 480_000);
+      // Idempotent — must run on EVERY terminal path. In particular, when
+      // safeEnqueue's catch marks the stream closed, safeClose()'s !closed
+      // guard skips its body, which would otherwise leave the heartbeat
+      // interval firing forever.
+      const cleanupTimers = () => {
+        if (killer) clearTimeout(killer);
+        if (heartbeat) clearInterval(heartbeat);
+      };
       const safeClose = () => {
+        cleanupTimers();
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
-          if (heartbeat) clearInterval(heartbeat);
           try {
             controller.close();
           } catch {
@@ -117,7 +124,16 @@ export async function POST(req: Request) {
           lastSent = Date.now();
           return true;
         } catch {
-          closed = true; // controller already closed underneath us — stop, never crash
+          // Controller closed underneath us — stop, never crash. Nobody will
+          // consume further output, so reap the child now instead of waiting
+          // for the 480s killer (which cleanupTimers just cleared).
+          closed = true;
+          cleanupTimers();
+          try {
+            child.kill("SIGTERM");
+          } catch {
+            /* ignore */
+          }
           return false;
         }
       };
