@@ -156,6 +156,10 @@ export async function POST(req: Request) {
         if (!closed && Date.now() - lastSent >= 15_000) safeEnqueue("\n");
       }, 15_000);
 
+      // A failed run (429 usage limit, auth expiry, …) produces NO text deltas —
+      // the CLI reports it as a synthetic final `result` with is_error. Hold the
+      // text and surface it on close, or the user sees a misleading generic guess.
+      let errorText = "";
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
         if (!isClaude) {
@@ -173,6 +177,8 @@ export async function POST(req: Request) {
             if (obj.type === "stream_event" && obj.event?.type === "content_block_delta") {
               const text = obj.event.delta?.text;
               if (typeof text === "string") emit(text);
+            } else if (obj.type === "result" && obj.is_error && typeof obj.result === "string") {
+              errorText = obj.result;
             }
           } catch {
             /* partial / non-json line — skip */
@@ -190,7 +196,9 @@ export async function POST(req: Request) {
         safeClose();
       });
       child.on("close", () => {
-        if (!emitted) safeEnqueue("_(no output — is the CLI authenticated?)_");
+        if (!emitted) {
+          safeEnqueue(errorText ? `_(${spec.name}: ${errorText})_` : "_(no output — is the CLI authenticated?)_");
+        }
         safeClose();
       });
     },
