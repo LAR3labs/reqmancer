@@ -150,6 +150,7 @@ export async function POST(req: Request) {
   // otherwise a late enqueue onto a closed controller throws uncaught (see #1155).
   let closed = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
@@ -157,23 +158,57 @@ export async function POST(req: Request) {
       let sawError = false;
       let lastTokens = 0; // per-run token cost from the Claude result event (#6) — local only
       let lastCostUsd: number | null = null;
+      let lastSent = Date.now();
       // pdf-mode tailors a full CV + renders it — give it more headroom.
       const killMs = kind === "pdf" ? 720_000 : 285_000;
       killer = setTimeout(() => {
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
       }, killMs);
+      // Idempotent, reachable from BOTH close() and the enqueue-failure path —
+      // when enqueue throws, `closed` flips without close() running, which used
+      // to leak the kill timer, the heartbeat, AND the tracker write token.
+      const cleanup = () => {
+        if (killer) { clearTimeout(killer); killer = undefined; }
+        if (heartbeat) { clearInterval(heartbeat); heartbeat = undefined; }
+        if (writeToken !== null) releaseTrackerWrite(writeToken);
+      };
       const send = (obj: unknown) => {
         if (closed) return;
-        try { controller.enqueue(enc.encode(JSON.stringify(obj) + "\n")); } catch { closed = true; }
+        try {
+          controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
+          lastSent = Date.now();
+        } catch {
+          closed = true;
+          cleanup();
+          try { child.kill("SIGTERM"); } catch { /* nobody is consuming its output */ }
+        }
       };
       const close = () => {
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
-          if (writeToken !== null) releaseTrackerWrite(writeToken);
+          cleanup();
           try { controller.close(); } catch { /* */ }
         }
       };
+
+      // Same WebKit guard as /api/explore/ai: Safari/WKWebView kills a fetch
+      // with ~60s of response silence, and a worker's long tool calls (writing
+      // the report, merge-tracker, PDF render) emit no events for minutes. The
+      // client parser skips empty NDJSON lines, so a bare newline is an
+      // invisible keep-alive; send() always enqueues whole lines, so a
+      // heartbeat can never split a JSON frame.
+      try { controller.enqueue(enc.encode("\n")); } catch { closed = true; }
+      heartbeat = setInterval(() => {
+        if (closed || Date.now() - lastSent < 15_000) return;
+        try {
+          controller.enqueue(enc.encode("\n"));
+          lastSent = Date.now();
+        } catch {
+          closed = true;
+          cleanup();
+          try { child.kill("SIGTERM"); } catch { /* ignore */ }
+        }
+      }, 15_000);
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
@@ -250,6 +285,7 @@ export async function POST(req: Request) {
     cancel() {
       closed = true;
       if (killer) clearTimeout(killer);
+      if (heartbeat) clearInterval(heartbeat);
       if (writeToken !== null) releaseTrackerWrite(writeToken);
       try { child.kill("SIGTERM"); } catch { /* ignore */ }
     },

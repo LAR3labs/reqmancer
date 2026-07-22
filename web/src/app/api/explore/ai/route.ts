@@ -85,10 +85,12 @@ export async function POST(req: Request) {
   // controller and throw an uncaught "Controller is already closed" (see #1155).
   let closed = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
       let emitted = false;
+      let lastSent = Date.now();
       killer = setTimeout(() => {
         try {
           child.kill("SIGTERM");
@@ -96,10 +98,18 @@ export async function POST(req: Request) {
           /* ignore */
         }
       }, 480_000);
+      // Idempotent — must run on EVERY terminal path. In particular, when
+      // safeEnqueue's catch marks the stream closed, safeClose()'s !closed
+      // guard skips its body, which would otherwise leave the heartbeat
+      // interval firing forever.
+      const cleanupTimers = () => {
+        if (killer) clearTimeout(killer);
+        if (heartbeat) clearInterval(heartbeat);
+      };
       const safeClose = () => {
+        cleanupTimers();
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
           try {
             controller.close();
           } catch {
@@ -111,9 +121,19 @@ export async function POST(req: Request) {
         if (closed || !s) return false;
         try {
           controller.enqueue(encoder.encode(s));
+          lastSent = Date.now();
           return true;
         } catch {
-          closed = true; // controller already closed underneath us — stop, never crash
+          // Controller closed underneath us — stop, never crash. Nobody will
+          // consume further output, so reap the child now instead of waiting
+          // for the 480s killer (which cleanupTimers just cleared).
+          closed = true;
+          cleanupTimers();
+          try {
+            child.kill("SIGTERM");
+          } catch {
+            /* ignore */
+          }
           return false;
         }
       };
@@ -121,6 +141,25 @@ export async function POST(req: Request) {
         if (safeEnqueue(s)) emitted = true;
       };
 
+      // WebKit (Safari / the desktop app's WKWebView) fails the whole fetch with
+      // a generic "Load failed" if the RESPONSE stays silent too long: headers
+      // don't flush until the first body byte, and NSURLSession's idle timeout
+      // (~60s) then kills the request — which an AI hunt trips easily during its
+      // opening web-search phase (stream-json events flow on stdout, but only
+      // text deltas are forwarded). Flush a byte immediately and keep the pipe
+      // warm whenever nothing has been SENT for a while. Whitespace-only chunks
+      // are invisible to the client parser; gating on sent-idle keeps a
+      // heartbeat from ever landing inside a split <<offer:…>> envelope (text
+      // deltas mid-envelope reset the timer as they're forwarded).
+      safeEnqueue("\n");
+      heartbeat = setInterval(() => {
+        if (!closed && Date.now() - lastSent >= 15_000) safeEnqueue("\n");
+      }, 15_000);
+
+      // A failed run (429 usage limit, auth expiry, …) produces NO text deltas —
+      // the CLI reports it as a synthetic final `result` with is_error. Hold the
+      // text and surface it on close, or the user sees a misleading generic guess.
+      let errorText = "";
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
         if (!isClaude) {
@@ -138,6 +177,8 @@ export async function POST(req: Request) {
             if (obj.type === "stream_event" && obj.event?.type === "content_block_delta") {
               const text = obj.event.delta?.text;
               if (typeof text === "string") emit(text);
+            } else if (obj.type === "result" && obj.is_error && typeof obj.result === "string") {
+              errorText = obj.result;
             }
           } catch {
             /* partial / non-json line — skip */
@@ -155,13 +196,16 @@ export async function POST(req: Request) {
         safeClose();
       });
       child.on("close", () => {
-        if (!emitted) safeEnqueue("_(no output — is the CLI authenticated?)_");
+        if (!emitted) {
+          safeEnqueue(errorText ? `_(${spec.name}: ${errorText})_` : "_(no output — is the CLI authenticated?)_");
+        }
         safeClose();
       });
     },
     cancel() {
       closed = true;
       if (killer) clearTimeout(killer);
+      if (heartbeat) clearInterval(heartbeat);
       try {
         child.kill("SIGTERM");
       } catch {

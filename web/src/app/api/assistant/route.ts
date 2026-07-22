@@ -117,10 +117,12 @@ export async function POST(req: Request) {
   // controller and throw an uncaught "Controller is already closed" (see #1155).
   let closed = false;
   let killer: ReturnType<typeof setTimeout> | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let buf = "";
       let emitted = false;
+      let lastSent = Date.now();
       killer = setTimeout(() => {
         try {
           child.kill("SIGTERM");
@@ -128,10 +130,17 @@ export async function POST(req: Request) {
           /* ignore */
         }
       }, 90_000);
+      // Idempotent, reachable from BOTH safeClose() and the enqueue-failure
+      // path — when enqueue throws, `closed` flips without safeClose() running,
+      // which would leave the heartbeat firing forever (same class as 8151723).
+      const cleanupTimers = () => {
+        if (killer) { clearTimeout(killer); killer = undefined; }
+        if (heartbeat) { clearInterval(heartbeat); heartbeat = undefined; }
+      };
       const safeClose = () => {
         if (!closed) {
           closed = true;
-          if (killer) clearTimeout(killer);
+          cleanupTimers();
           try {
             controller.close();
           } catch {
@@ -143,15 +152,36 @@ export async function POST(req: Request) {
         if (closed || !s) return false;
         try {
           controller.enqueue(encoder.encode(s));
+          lastSent = Date.now();
           return true;
         } catch {
           closed = true; // controller already closed underneath us — stop, never crash
+          cleanupTimers();
+          try {
+            child.kill("SIGTERM"); // nobody is consuming its output anymore
+          } catch {
+            /* ignore */
+          }
           return false;
         }
       };
       const emit = (s: string) => {
         if (safeEnqueue(s)) emitted = true;
       };
+
+      // Same WebKit guard as /api/explore/ai and /api/run: Safari/WKWebView
+      // kills a fetch with ~60s of response silence, which a long tool call
+      // (reading reports, WebFetch) can trip mid-turn. Flush a byte so headers
+      // go out now, and keep the pipe warm when nothing has been SENT for 15s.
+      // The console trimStart()s the display and `!acc.trim()`-checks the
+      // no-output fallback, so whitespace heartbeats are invisible; gating on
+      // sent-idle keeps one from landing inside a split <<act:…>> envelope
+      // (text deltas mid-envelope reset the timer as they're forwarded).
+      // Heartbeats bypass emit() so they never count as CLI output.
+      safeEnqueue("\n");
+      heartbeat = setInterval(() => {
+        if (!closed && Date.now() - lastSent >= 15_000) safeEnqueue("\n");
+      }, 15_000);
 
       child.stdout.on("data", (d: Buffer) => {
         if (closed) return;
@@ -197,6 +227,7 @@ export async function POST(req: Request) {
     cancel() {
       closed = true;
       if (killer) clearTimeout(killer);
+      if (heartbeat) clearInterval(heartbeat);
       try {
         child.kill("SIGTERM");
       } catch {

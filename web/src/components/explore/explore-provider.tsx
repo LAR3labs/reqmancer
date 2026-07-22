@@ -546,14 +546,16 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setAiTrace(Array.isArray(snap.aiTrace) ? snap.aiTrace : []);
     setAiCost(snap.aiCost ?? { searches: 0, candidates: 0, fetches: 0 });
     if (typeof snap.aiIntent === "string") setAiIntent(snap.aiIntent);
-    // Never rehydrate INTO a running phase — no live stream backs it.
-    const RUNNING = new Set<Phase>(["casting", "scanning", "revealing", "hunting"]);
-    setPhase(RUNNING.has(snap.phase) ? (snap.offers.length ? "results" : "idle") : snap.phase);
+    // Never rehydrate INTO a running phase (no live stream backs it) or "blocked"
+    // (a config gate, re-checked per attempt — a stale snapshot would keep showing
+    // the needs-a-CLI card after the user configures one).
+    const NON_RESTORABLE = new Set<Phase>(["casting", "scanning", "revealing", "hunting", "blocked"]);
+    setPhase(NON_RESTORABLE.has(snap.phase) ? (snap.offers.length ? "results" : "idle") : snap.phase);
   }, []);
 
   // Persist only SETTLED states (never mid-stream) so a reload restores a complete set.
   useEffect(() => {
-    const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded", "blocked"]);
+    const SETTLED = new Set<Phase>(["results", "empty-current", "empty-loose", "failed", "degraded"]);
     if (!SETTLED.has(phase)) return;
     try {
       const snap: ResultSnapshot = {
