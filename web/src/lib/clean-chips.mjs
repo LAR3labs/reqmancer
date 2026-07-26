@@ -30,7 +30,11 @@ const MAX_FILTER_LIST = 128;
  * re-truncate the user's own policy on the main request path — the exact bug
  * this all fixes. A high bound protects every caller without that regression.
  */
-export function cleanFilterList(v) {
+// Shared loop. `limit` is enforced INSIDE it so each caller's bound is a real
+// early exit — cleaning to 128 and slicing to 16 afterwards would make the
+// tighter chip cap do 8x the work it asks for on exactly the untrusted input
+// it exists to bound.
+function cleanList(v, limit) {
   if (v == null) return [];
   const arr = Array.isArray(v) ? v : [v];
   const seen = new Set();
@@ -44,14 +48,18 @@ export function cleanFilterList(v) {
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(k);
-    if (out.length >= MAX_FILTER_LIST) break;
+    if (out.length >= limit) break;
   }
   return out;
 }
 
-/** cleanFilterList + a hard cap. For UNTRUSTED/ad-hoc chip input (the assistant's
+export function cleanFilterList(v) {
+  return cleanList(v, MAX_FILTER_LIST);
+}
+
+/** cleanList at a hard 16. For UNTRUSTED/ad-hoc chip input (the assistant's
  *  patch path, URL params) where an unbounded list is a DoS-ish footgun. Never
  *  use this on portals.yml-derived policy lists — see cleanFilterList. */
 export function cleanChips(v) {
-  return cleanFilterList(v).slice(0, CHIP_CAP);
+  return cleanList(v, CHIP_CAP);
 }
