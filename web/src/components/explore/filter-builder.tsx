@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X, Ban, Clock, MapPin, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { ATS_LABEL, ATS_SOURCES, cleanChips, type AtsSource, type ExploreFilters } from "@/lib/explore";
+import { ATS_LABEL, ATS_SOURCES, cleanFilterList, type AtsSource, type ExploreFilters } from "@/lib/explore";
 
 const RECENCY = [
   { label: "24h", days: 1 },
@@ -42,7 +42,9 @@ function KeywordField({
   // "New York", "Costa Rica"). A space-only paste stays one chip on purpose (#1147).
   const commit = (text: string) => {
     const parts = text.split(/[,\n;\t\r]+/);
-    const next = cleanChips([...values, ...parts]);
+    // Uncapped: `values` are the user's seeded portals.yml policy. Capping here
+    // meant editing ANY chip silently deleted every list entry past the 16th.
+    const next = cleanFilterList([...values, ...parts]);
     onChange(next);
     setDraft("");
   };
