@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   DEFAULT_FILTERS,
   ATS_LABEL,
+  buildLocationMatcher,
   filtersToParams,
   aiToParams,
   isBroadSearch,
@@ -442,7 +443,11 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* best-effort dedup */
     }
-    const parser = makeAiStreamParser({ knownUrls });
+    // AI search runs on a free-text intent, but the user's LOCATION policy still
+    // applies — it's a hard constraint, not a search term. filtersRef is seeded
+    // from portals.yml on mount, so this is the same allow/block/always_allow the
+    // deterministic scanners enforce.
+    const parser = makeAiStreamParser({ knownUrls, locationOk: buildLocationMatcher(filtersRef.current) });
 
     const acc: DiscoveredOffer[] = [];
     let sawError = "";
@@ -497,15 +502,20 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
 
     runningRef.current = false;
+    // A hunt that found plenty but filtered most of it out must SAY so — otherwise
+    // "2 candidates" reads as a weak search rather than a working location policy.
+    const dropped = parser.locationRejects();
+    const droppedNote = dropped > 0 ? ` ${dropped} outside your location filter.` : "";
     if (acc.length > 0) {
       setMatchCount(acc.length);
       setPhase("revealing");
-      setStatus(`${acc.length} candidate${acc.length === 1 ? "" : "s"} found.`);
+      setStatus(`${acc.length} candidate${acc.length === 1 ? "" : "s"} found.${droppedNote}`);
       window.setTimeout(() => setPhase("results"), 850);
     } else if (sawError) {
       setError(sawError);
       setPhase("failed");
     } else {
+      setStatus(dropped > 0 ? `No candidates in range.${droppedNote}` : "");
       setPhase("empty-loose");
     }
   }, []);

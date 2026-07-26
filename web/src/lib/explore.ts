@@ -42,6 +42,39 @@ export const DEFAULT_FILTERS: ExploreFilters = {
   includePortals: true,
 };
 
+/**
+ * Client-safe mirror of scan.mjs::buildLocationFilter. The deterministic scanners
+ * get location filtering for free (scan.mjs / scan-ats-full.mjs both call the core
+ * builder), but AI search parses its `<<offer:>>` envelopes in the BROWSER and so
+ * never touched the filter at all — a role in EMEA could land in the results even
+ * though "emea" is in the user's block list. This is the shared predicate for that
+ * path; the semantics must stay identical to the core builder:
+ *
+ *   blank/non-string location → pass (never penalize missing provider data)
+ *   always_allow hit          → pass (beats block, for multi-region strings)
+ *   block hit                 → reject
+ *   allow empty               → pass (block already cleared it)
+ *   allow non-empty           → must hit at least one keyword
+ */
+export function buildLocationMatcher(
+  f: Pick<ExploreFilters, "allow" | "block" | "alwaysAllow">,
+): (location: string) => boolean {
+  const norm = (list: string[]) => cleanFilterList(list).map((k) => k.toLowerCase());
+  const alwaysAllow = norm(f.alwaysAllow);
+  const allow = norm(f.allow);
+  const block = norm(f.block);
+  if (!alwaysAllow.length && !allow.length && !block.length) return () => true;
+
+  return (location: string) => {
+    if (typeof location !== "string" || location.trim() === "") return true;
+    const lower = location.toLowerCase();
+    if (alwaysAllow.length > 0 && alwaysAllow.some((k) => lower.includes(k))) return true;
+    if (block.length > 0 && block.some((k) => lower.includes(k))) return false;
+    if (allow.length === 0) return true;
+    return allow.some((k) => lower.includes(k));
+  };
+}
+
 export type DiscoveredOffer = {
   url: string;
   company: string;
@@ -99,8 +132,8 @@ export type ScanEvent =
 // cleanChips is defined in clean-chips.mjs (plain JS) so it can be shared
 // with the test suite without a TypeScript runner. Import for internal use
 // and re-export for external consumers (filter-builder.tsx, etc.).
-import { cleanChips } from "./clean-chips.mjs";
-export { cleanChips };
+import { cleanChips, cleanFilterList } from "./clean-chips.mjs";
+export { cleanChips, cleanFilterList };
 
 function clampNum(v: unknown, lo: number, hi: number, fallback: number): number {
   const n = Number(v);
@@ -123,7 +156,12 @@ function cleanAts(v: unknown): AtsSource[] {
 /** Apply a (possibly partial) action/assistant patch onto a base. The assistant
  *  emits {positive,negative,allow,block,alwaysAllow,since,ats,limit}. With
  *  merge=true, list fields are ADDED to the base; otherwise the given fields
- *  REPLACE. Unspecified fields are left as-is. */
+ *  REPLACE. Unspecified fields are left as-is.
+ *
+ *  Lists are cleaned UNCAPPED (cleanFilterList): this is also the parser
+ *  /api/explore uses on the filters the UI posts, so a cap here silently
+ *  truncated the user's own portals.yml policy on the way to the scanner —
+ *  a 32-keyword location block list arrived as 16 and the rest never applied. */
 export function parseExplorePatch(
   raw: Record<string, unknown>,
   base: ExploreFilters = DEFAULT_FILTERS,
@@ -139,8 +177,8 @@ export function parseExplorePatch(
   ];
   for (const [field, key] of lists) {
     if (raw[key] === undefined) continue;
-    const incoming = cleanChips(raw[key]);
-    next[field] = (merge ? cleanChips([...(base[field] as string[]), ...incoming]) : incoming) as never;
+    const incoming = cleanFilterList(raw[key]);
+    next[field] = (merge ? cleanFilterList([...(base[field] as string[]), ...incoming]) : incoming) as never;
   }
   if (raw.since !== undefined) next.sinceDays = clampNum(raw.since, 1, 60, base.sinceDays);
   if (raw.sinceDays !== undefined) next.sinceDays = clampNum(raw.sinceDays, 1, 60, base.sinceDays);

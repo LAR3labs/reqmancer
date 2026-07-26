@@ -4,7 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import yaml from "js-yaml";
 import { careerOpsRoot } from "@/lib/career-ops";
-import { DEFAULT_FILTERS, cleanChips, type ExploreFilters } from "@/lib/explore";
+import { DEFAULT_FILTERS, cleanFilterList, type ExploreFilters } from "@/lib/explore";
 
 /**
  * ACL for portals.yml — the core's scan-filter config (a CONTRACT entry-point,
@@ -21,8 +21,12 @@ import { DEFAULT_FILTERS, cleanChips, type ExploreFilters } from "@/lib/explore"
  */
 type FilterLists = Pick<ExploreFilters, "positive" | "negative" | "allow" | "block" | "alwaysAllow">;
 
+// Uncapped on purpose: these lists come from the user's real portals.yml and are
+// written back out as the ephemeral scanner config. Capping here silently dropped
+// everything past the 16th block keyword, so an in-app scan enforced only half the
+// user's location policy while `node scan.mjs` enforced all of it.
 function listFrom(v: unknown): string[] {
-  return cleanChips(v);
+  return cleanFilterList(v);
 }
 
 /** Serialize filters into a minimal, valid portals.yml. Scalars go through

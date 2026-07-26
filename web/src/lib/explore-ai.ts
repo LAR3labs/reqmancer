@@ -46,9 +46,19 @@ function toOffer(raw: unknown): DiscoveredOffer | null {
   };
 }
 
-export function makeAiStreamParser(opts?: { knownUrls?: Set<string> }) {
+export function makeAiStreamParser(opts?: {
+  knownUrls?: Set<string>;
+  /** Location predicate (see explore.ts::buildLocationMatcher). AI search is the
+   *  one discovery path the core's location filter never reached — modes/discover.md
+   *  tells the agent to be a "GENEROUS FINDER" and include roles whose location it
+   *  can't confirm, so without this an explicitly-blocked region lands in results.
+   *  Rejected offers are counted, not silently vanished, so the UI can say why. */
+  locationOk?: (location: string) => boolean;
+}) {
   const known = opts?.knownUrls ?? new Set<string>();
+  const locationOk = opts?.locationOk ?? (() => true);
   const seen = new Set<string>();
+  let rejectedByLocation = 0;
   let buf = "";
 
   return {
@@ -58,20 +68,26 @@ export function makeAiStreamParser(opts?: { knownUrls?: Set<string> }) {
       for (;;) {
         const open = buf.indexOf(OPEN);
         if (open === -1) {
-          // No opener in view. Flush as narration — but hold back a short tail
-          // that could be the start of a split opener ("<<offe…").
-          const keep = OPEN.length - 1;
-          if (buf.length > keep) {
-            const tail = buf.slice(buf.length - keep);
-            if (OPEN.startsWith(tail)) {
-              const text = buf.slice(0, buf.length - keep);
-              if (text.trim()) out.push({ kind: "narration", text });
-              buf = tail;
-            } else {
-              if (buf.trim()) out.push({ kind: "narration", text: buf });
-              buf = "";
+          // No opener in view. Flush as narration — but hold back the trailing
+          // fragment of a split opener ("<<offe…").
+          //
+          // This used to test ONLY the fixed-width 7-char tail: a buffer ending
+          // in a SHORTER fragment ("…text\n<<") failed `OPEN.startsWith(tail)`
+          // and the whole buffer — opener included — was flushed as narration.
+          // The stream never recovered: that envelope and EVERY envelope after
+          // it degraded into narration text, so an AI hunt could silently lose
+          // most of its candidates depending on where chunk boundaries landed.
+          // Hold back the LONGEST suffix that is a prefix of OPEN instead.
+          let keep = 0;
+          for (let n = Math.min(OPEN.length - 1, buf.length); n > 0; n--) {
+            if (OPEN.startsWith(buf.slice(buf.length - n))) {
+              keep = n;
+              break;
             }
           }
+          const text = keep ? buf.slice(0, buf.length - keep) : buf;
+          if (text.trim()) out.push({ kind: "narration", text });
+          buf = keep ? buf.slice(buf.length - keep) : "";
           break;
         }
         const before = buf.slice(0, open);
@@ -97,6 +113,10 @@ export function makeAiStreamParser(opts?: { knownUrls?: Set<string> }) {
         const key = canon(offer.url);
         if (seen.has(key) || known.has(key)) continue; // intra-run + known dedup
         seen.add(key);
+        if (!locationOk(offer.location)) {
+          rejectedByLocation++;
+          continue;
+        }
         out.push({ kind: "offer", offer });
       }
       return out;
@@ -106,6 +126,11 @@ export function makeAiStreamParser(opts?: { knownUrls?: Set<string> }) {
       const text = buf;
       buf = "";
       return text.trim() ? [{ kind: "narration" as const, text }] : [];
+    },
+    /** How many well-formed, non-duplicate candidates the location filter dropped.
+     *  Surfaced in the run status so a thin result set is never a mystery. */
+    locationRejects(): number {
+      return rejectedByLocation;
     },
   };
 }
