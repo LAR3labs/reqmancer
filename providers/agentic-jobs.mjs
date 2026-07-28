@@ -82,14 +82,20 @@ export function normalizeAgenticCard(slug, lines) {
   // Drop the leftover `slug">` artifact of the split plus any Featured badge.
   const fields = lines.filter((l) => !l.includes('">') && l !== 'Featured');
   if (fields.length < 2) return null;
-  const [title, company, maybeLocation] = fields;
+  const [title, company] = fields;
   if (!title || !company) return null;
 
-  let location = maybeLocation && !/^\d{4}-\d{2}-\d{2}$/.test(maybeLocation) ? maybeLocation : '';
+  // Badges after the company are CLASSIFIED, not positional. The 2026-07 redesign
+  // reordered them (salary and tech tags can now precede the country flag), and
+  // the old `fields[2]` read produced locations like "CrewAI, United States" and
+  // "$120K - $120K/yr, United States" — a tech tag and a pay range landing in the
+  // location, which then went to scan.mjs's location_filter.
+  const rest = fields.slice(2);
+  const workplace = rest.find((l) => WORKPLACE_RE.test(l)) || '';
   const flag = fields.map(flagToCountry).find(Boolean);
-  if (flag) location = location ? `${location}, ${flag}` : flag;
+  const location = [workplace, flag].filter(Boolean).join(', ');
 
-  /** @type {{ title: string, url: string, company: string, location: string, postedAt?: number }} */
+  /** @type {{ title: string, url: string, company: string, location: string, postedAt?: number, salary?: {min: number, max: number, currency: string} }} */
   const job = { title, url: `${SITE_ORIGIN}/jobs/${slug}`, company, location };
 
   const dateLine = fields.find((l) => /^\d{4}-\d{2}-\d{2}$/.test(l));
@@ -97,7 +103,37 @@ export function normalizeAgenticCard(slug, lines) {
     const parsed = Date.parse(`${dateLine}T00:00:00Z`);
     if (!Number.isNaN(parsed)) job.postedAt = parsed;
   }
+
+  // The redesign also exposed pay ranges on the card. Free signal — feed it to
+  // salary_filter rather than throwing it away.
+  const salaryLine = rest.find((l) => SALARY_RE.test(l));
+  if (salaryLine) {
+    const salary = parseAgenticSalary(salaryLine);
+    if (salary) job.salary = salary;
+  }
   return job;
+}
+
+const WORKPLACE_RE = /^(remote|hybrid|on-?site|in-?office)$/i;
+const SALARY_RE = /\$\s*[\d.,]+\s*k?\s*(?:-|–|to)?/i;
+
+/**
+ * Parse an agentic-jobs pay badge ("$216K - $224K/yr", "$120K/yr") into the
+ * scanner's salary shape. Only per-YEAR ranges are trusted, so an hourly badge
+ * can never be compared against an annual floor. Exported for tests.
+ * @param {string} label
+ */
+export function parseAgenticSalary(label) {
+  if (!/\/\s*yr|per\s+year|annual/i.test(label)) return undefined;
+  const nums = [];
+  for (const m of label.matchAll(/\$\s*([\d,.]+)\s*(k?)/gi)) {
+    const raw = Number(m[1].replace(/,/g, ''));
+    if (!Number.isFinite(raw) || raw <= 0) continue;
+    nums.push(m[2].toLowerCase() === 'k' ? raw * 1000 : raw);
+  }
+  const sane = nums.filter((n) => n >= 1000 && n <= 10_000_000);
+  if (sane.length === 0) return undefined;
+  return { min: Math.min(...sane), max: Math.max(...sane), currency: 'USD' };
 }
 
 /**
@@ -105,15 +141,20 @@ export function normalizeAgenticCard(slug, lines) {
  * @param {string} html
  */
 export function parseAgenticListing(html) {
+  if (typeof html !== 'string') return [];
   const out = [];
   const seen = new Set();
-  const segments = html.split(/<div[^>]*\bdata-impression-slug="/).slice(1);
-  for (const seg of segments) {
-    const slug = seg.slice(0, seg.indexOf('"'));
-    // Cards can nest other markup; stop this card at the next card boundary.
-    const nextCard = seg.indexOf('data-impression-slug', slug.length + 2);
-    const body = nextCard > 0 ? seg.slice(0, nextCard) : seg;
-    const job = normalizeAgenticCard(slug, cardLines(body));
+  // The site dropped `data-impression-slug` containers (2026-07 redesign) — each
+  // card is now the posting ANCHOR itself, `<a … href="/jobs/{slug}">`. The field
+  // order INSIDE a card is unchanged, so only the boundary detection moved here.
+  // Anchoring on the href also makes the parser independent of the utility-class
+  // soup around it, which is what broke last time.
+  const bounds = [...html.matchAll(/<a[^>]*\bhref="\/jobs\/([A-Za-z0-9._~-]+)"/g)];
+  for (let i = 0; i < bounds.length; i++) {
+    const start = bounds[i].index ?? 0;
+    const end = i + 1 < bounds.length ? bounds[i + 1].index : html.length;
+    const slug = bounds[i][1];
+    const job = normalizeAgenticCard(slug, cardLines(html.slice(start, end)));
     if (job && !seen.has(job.url)) {
       seen.add(job.url);
       out.push(job);

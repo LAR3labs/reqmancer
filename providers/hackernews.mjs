@@ -16,8 +16,21 @@
 //
 // Wire in via a `job_boards:` entry with `provider: hackernews`.
 
+// Find the thread by AUTHOR, not by free-text query.
+//
+// The original URL was `tags=story&query=Ask HN Who is hiring&hitsPerPage=5`.
+// search_by_date sorts by recency and matches the query loosely, so the five
+// newest *loose* matches were things like "Ask HN: Who is dating?" and "Ask HN:
+// Is neuromorphic computing…" — the actual monthly thread was nowhere in the
+// window, and the provider threw "could not find thread" on every run.
+//
+// The monthly threads are always posted by the `whoishiring` bot account, so
+// tagging on the author makes the result set exactly the threads we want. Note
+// it posts TWO stories per month at the same timestamp ("Who is hiring?" and
+// "Who wants to be hired?"), so the title still has to be matched — see
+// resolveLatestThreadId.
 const SEARCH_URL =
-  'https://hn.algolia.com/api/v1/search_by_date?tags=story&query=Ask%20HN%20Who%20is%20hiring&hitsPerPage=5';
+  'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10';
 
 /** @param {string} id */
 function itemUrl(id) {
@@ -122,9 +135,17 @@ export function resolveLatestThreadId(data) {
 
   // Algolia search_by_date returns newest first; find the first hit whose title
   // matches the monthly thread pattern (case-insensitive).
+  //
+  // "Who WANTS TO BE HIRED?" is posted by the same account at the same second and
+  // is the mirror image of what we want (candidates advertising themselves, not
+  // employers). It must be excluded explicitly: a loose /who.*hiring/ test would
+  // match "who wants to be hired" on some phrasings, and picking it would fill
+  // the pipeline with job SEEKERS.
+  const WANT = /wants?\s+to\s+be\s+hired/i;
   const RE = /ask\s+hn[:\s]+who\s+is\s+hiring/i;
   for (const hit of hits) {
     if (hit && typeof hit.objectID === 'string' && typeof hit.title === 'string') {
+      if (WANT.test(hit.title)) continue;
       if (RE.test(hit.title)) return hit.objectID;
     }
   }
