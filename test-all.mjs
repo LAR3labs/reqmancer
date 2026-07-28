@@ -3486,6 +3486,41 @@ try {
   if (stockFilter('Remote, Belgium or France') === false) pass('without always_allow, block still wins (backward compatible)');
   else fail('without always_allow, behaviour must match stock allow/block (block wins)');
 
+  // Case 6b: allow_bare_remote — the opt-in tier (#discover-coverage, 2026-07-28).
+  // A location that is ONLY "Remote" carries no country, so a US-positive allow
+  // list treats it exactly like a foreign posting and drops it. Measured cost:
+  // EchoJobs contributed 0 offers for this reason alone.
+  const usAllow = {
+    always_allow: ['charlotte'],
+    block: ['europe', 'germany', 'india', 'canada'],
+    allow: ['us, remote', 'remote, us', 'united states, remote'],
+  };
+  const bareOn = buildLocationFilter({ ...usAllow, allow_bare_remote: true });
+  const bareOff = buildLocationFilter(usAllow);
+
+  // Default OFF: an existing policy must not shift under anyone who didn't opt in.
+  if (bareOff('Remote') === false) pass('allow_bare_remote defaults OFF (no silent policy change)');
+  else fail('allow_bare_remote must be opt-in — bare "Remote" passed without the flag');
+
+  const bareForms = ['Remote', 'remote', '(Remote)', 'Remote -', 'Remote.'];
+  if (bareForms.every((l) => bareOn(l) === true)) pass('allow_bare_remote accepts every bare "Remote" punctuation form');
+  else fail(`allow_bare_remote missed a bare form: ${bareForms.filter((l) => bareOn(l) !== true).join(', ')}`);
+
+  // The load-bearing guarantee: the moment the string names ANYWHERE, the tier
+  // must not fire. Otherwise this becomes the "any remote role" hole the
+  // US-positive allow list was written to close.
+  const placed = ['Remote, Berlin', 'Remote - EU', 'Remote, Germany', 'Remote, India', 'Remote Europe', 'Anywhere in the World', 'Remotely in Spain'];
+  const leaked = placed.filter((l) => bareOn(l) !== false);
+  if (leaked.length === 0) pass('allow_bare_remote never fires once a place is named');
+  else fail(`allow_bare_remote leaked located postings: ${leaked.join(' | ')}`);
+
+  // Unrelated paths must be untouched by the new tier.
+  if (bareOn('US, Remote') === true && bareOn('Charlotte, NC') === true && bareOn('New York, NY') === false) {
+    pass('allow_bare_remote leaves the allow/always_allow/reject paths unchanged');
+  } else {
+    fail('allow_bare_remote altered an unrelated location decision');
+  }
+
   // Case 7: null/missing locationFilter → pass-all filter (early-return path)
   const nullFilter = buildLocationFilter(null);
   if (nullFilter('Anywhere on Earth') === true && nullFilter('') === true) {
