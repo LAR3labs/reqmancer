@@ -592,8 +592,9 @@ if (urlTextIdx !== -1 || directUrl) {
       try {
         const secureUrl = await validateUrlSecurity(inputSource);
         const { chromium } = await import('playwright');
-        browser = await chromium.launch({ headless: true });
-        const page = await browser.newPage();
+        const { launchStealthBrowser, newStealthPage } = await import('./browser-launch.mjs');
+        ({ browser } = await launchStealthBrowser());
+        const page = await newStealthPage(browser);
 
         page.on('framenavigated', async (frame) => {
           if (frame === page.mainFrame()) {

@@ -119,3 +119,8 @@ plan/
 
 # Web
 .career-ops-web/logo-cache/
+
+# Persistent Chrome profile used by the stealth launcher (browser-launch.mjs).
+# Tens of MB of binary cache, and it holds COOKIES for every site the scanner
+# visits — must never be committed.
+.career-ops-web/browser-profile/
