@@ -302,7 +302,8 @@ async function main() {
     }
   } else {
     // Sequential — project convention: never Playwright in parallel
-    const browser = await chromium.launch({ headless: true });
+    const { launchStealthBrowser } = await import('./browser-launch.mjs');
+    const { browser } = await launchStealthBrowser();
     try {
       for (const { url, company, role } of targets) {
         try {

@@ -36,6 +36,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { LIVENESS_CONTEXT_OPTIONS, rejectPrivateOrInvalid } from './liveness-browser.mjs';
+import { launchStealthBrowser, newStealthContext } from './browser-launch.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 
@@ -209,8 +210,8 @@ async function main() {
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext(LIVENESS_CONTEXT_OPTIONS);
+    ({ browser } = await launchStealthBrowser());
+    const context = await newStealthContext(browser);
     // Block every request (main navigation, redirect hop, or subresource) to a
     // private/loopback/link-local or non-http(s) host. Guarding only the initial
     // URL isn't enough once we return page CONTENT: a server-side redirect could

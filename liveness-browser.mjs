@@ -6,39 +6,43 @@
  */
 
 import { classifyLiveness } from './liveness-core.mjs';
+import {
+  buildUserAgent,
+  jitteredDelayMs as sharedJitteredDelayMs,
+  launchPersistentStealthContext,
+  launchStealthBrowser,
+  newStealthPage,
+  STEALTH_CONTEXT_DEFAULTS,
+} from './browser-launch.mjs';
 
 const NAVIGATE_TIMEOUT_MS = 15_000;
 const HYDRATION_WAIT_MS = 2_000;
 
-// The default Playwright headless UA contains "HeadlessChrome", which Cloudflare
-// and similar WAFs flag — portals like pracuj.pl then serve a 403 challenge page
-// instead of the posting. Presenting a normal desktop Chrome UA clears the wall
-// headlessly (the scan parser scripts/parsers/pracuj-jobs.mjs relies on the same
-// trick), so the common case never needs the slower headed-browser fallback.
+// Fingerprint hardening now lives in browser-launch.mjs (one place, all outbound
+// sessions). This used to be a bare hardcoded Chrome/120 UA + locale; the problem
+// with a pinned UA is that it DRIFTS — by 2026 a Chrome/120 UA is itself a bot
+// signal, which is the opposite of what it was added for. The shared module
+// derives the UA from the launched binary's real version instead.
+//
+// Kept as a named export because browser-extract.mjs and the tests import it.
 export const LIVENESS_CONTEXT_OPTIONS = {
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  locale: 'en-US',
+  userAgent: buildUserAgent(''),
+  ...STEALTH_CONTEXT_DEFAULTS,
 };
 
-// Open a page in a context that already presents a realistic UA. Both callers use
-// this instead of browser.newPage() so headless checks aren't instantly bot-walled.
+// Open a page in a context that presents a realistic fingerprint. Every caller
+// uses this instead of browser.newPage() so a check is never instantly bot-walled.
+// Delegates to the shared helper, which also installs the init-script layer
+// (navigator.webdriver, window.chrome, plugins) that a plain newContext lacks.
 export async function newLivenessPage(browser) {
-  const context = await browser.newContext(LIVENESS_CONTEXT_OPTIONS);
-  return context.newPage();
+  return newStealthPage(browser);
 }
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Throttle delay with jitter: a value in [baseMs, 2*baseMs). Spacing requests out
-// (and randomizing the gap) keeps a bulk run under rate-based WAF thresholds —
-// pracuj.pl's Cloudflare flags the session after ~2 rapid hits, after which even
-// headed retries are blocked. A randomized gap also avoids a fixed-cadence
-// fingerprint. Returns 0 for a non-positive base (throttling disabled).
-export function jitteredDelayMs(baseMs) {
-  if (!baseMs || baseMs <= 0) return 0;
-  return baseMs + Math.floor(Math.random() * baseMs);
-}
+// Re-exported from browser-launch.mjs so existing importers (scan.mjs,
+// check-liveness.mjs, test-all.mjs) keep working unchanged.
+export const jitteredDelayMs = sharedJitteredDelayMs;
 
 // Defensive guards: URLs come from ATS feeds (mostly trusted) but a misconfigured
 // portals.yml entry or a hijacked feed shouldn't be able to point Playwright at
@@ -198,18 +202,41 @@ export function isChallengeResult(result) {
 // across URLs. Headed Chromium needs a display, so launch can fail in headless/CI
 // environments — in that case get() returns null and callers degrade to the
 // headless result (challenge stays uncertain, never falsely expired).
-export function createHeadedPageProvider(chromium) {
+//
+// PERSISTENT PROFILE (opt-in, default ON here): this provider only ever runs
+// AFTER a page has already tripped a wall headlessly, which makes it the single
+// highest-value place to reuse browser state — a WAF clearance cookie earned on
+// one URL then carries to the next instead of being thrown away with the
+// browser. Chrome locks the profile directory, so if a second career-ops process
+// already holds it we fall back to a throwaway (ephemeral) session rather than
+// failing the check outright.
+export function createHeadedPageProvider(chromium, { persist = true } = {}) {
   let browser = null;
+  let context = null;
   let page = null;
   let launchFailed = false;
   return {
     async get() {
       if (page) return page;
       if (launchFailed) return null;
+      // Headed + real Chrome + a warm profile is the strongest configuration
+      // available, which is exactly what this fallback is for. `chromium` is
+      // passed in by the caller, but the shared launcher owns the channel/args
+      // choice, so it is ignored here.
+      if (persist) {
+        try {
+          ({ context } = await launchPersistentStealthContext({ headed: true }));
+          page = await context.newPage();
+          return page;
+        } catch {
+          // Profile locked by a concurrent run, or unwritable — degrade to an
+          // ephemeral session instead of giving up the retry entirely.
+          context = null;
+        }
+      }
       try {
-        browser = await chromium.launch({ headless: false });
-        const context = await browser.newContext(LIVENESS_CONTEXT_OPTIONS);
-        page = await context.newPage();
+        ({ browser } = await launchStealthBrowser({ headed: true }));
+        page = await newStealthPage(browser);
         return page;
       } catch {
         launchFailed = true;
@@ -219,14 +246,19 @@ export function createHeadedPageProvider(chromium) {
       }
     },
     async close() {
-      if (browser) {
-        try {
-          await browser.close();
-        } catch {
-          // best-effort teardown
+      // Persistent mode has a context and no browser handle; ephemeral mode is
+      // the reverse. Close whichever we actually opened.
+      for (const handle of [context, browser]) {
+        if (handle) {
+          try {
+            await handle.close();
+          } catch {
+            // best-effort teardown
+          }
         }
       }
       browser = null;
+      context = null;
       page = null;
     },
   };
