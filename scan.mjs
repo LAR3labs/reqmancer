@@ -163,17 +163,36 @@ function normalizeKeywordList(value) {
     .filter(Boolean);
 }
 
+// A location that is ONLY the word "remote" — "Remote", "remote.", "(Remote)",
+// "Remote -". Nothing else in the string: no city, no country, no region.
+//
+// This is the one case a substring `allow` list provably cannot express. The
+// allow tier demands a US signal and a remote signal in the SAME string, which
+// is correct for "Remote, Berlin" but wrong for a bare "Remote" — a US board
+// that omits the country was being treated identically to a foreign posting,
+// so real US-remote roles were dropped (EchoJobs emits exactly this shape).
+//
+// Safe because it is strictly anchored: the moment the string names anywhere at
+// all, this returns false and the normal allow/block tiers decide. "Remote,
+// Berlin" and "Remote - EU" never reach it.
+const BARE_REMOTE_RE = /^[\s\-–—(\[]*remote[\s\-–—.)\]]*$/i;
+
 export function buildLocationFilter(locationFilter) {
   if (!locationFilter) return () => true;
   const alwaysAllow = normalizeKeywordList(locationFilter.always_allow);
   const allow = normalizeKeywordList(locationFilter.allow);
   const block = normalizeKeywordList(locationFilter.block);
+  // Opt-in, defaults OFF so no other user's policy changes under them.
+  const allowBareRemote = locationFilter.allow_bare_remote === true;
 
   return (location) => {
     if (typeof location !== 'string' || location.trim() === '') return true;
     const lower = location.toLowerCase();
     if (alwaysAllow.length > 0 && alwaysAllow.some(k => lower.includes(k))) return true;
     if (block.length > 0 && block.some(k => lower.includes(k))) return false;
+    // After block, before allow: a blocked region still wins over a bare match,
+    // though by construction a bare "remote" carries no region to block.
+    if (allowBareRemote && BARE_REMOTE_RE.test(location)) return true;
     if (allow.length === 0) return true;
     return allow.some(k => lower.includes(k));
   };
@@ -1270,7 +1289,10 @@ async function verifyOffers(offers, { headedFallback = false, throttleBaseMs = 0
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    // Shared stealth launcher: real Chrome when available, automation flags off,
+    // realistic fingerprint. See browser-launch.mjs.
+    const { launchStealthBrowser } = await import('./browser-launch.mjs');
+    ({ browser } = await launchStealthBrowser());
   } catch (err) {
     throw new Error(
       `--verify could not launch Chromium (run "npx playwright install chromium" or re-run without --verify): ${err.message}`,
