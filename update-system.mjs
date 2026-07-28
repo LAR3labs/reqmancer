@@ -167,6 +167,7 @@ const SYSTEM_PATHS = [
   'liveness-core.mjs',
   'liveness-api.mjs',
   'liveness-browser.mjs',
+  'browser-launch.mjs',
   'browser-extract.mjs',
   'analyze-patterns.mjs',
   'upskill.mjs',
