@@ -1,14 +1,15 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { resolveCli } from "@/lib/clis";
 import { careerOpsRoot, readMemory } from "@/lib/career-ops";
 import { assembleDedupContext } from "@/lib/core/discover";
+import { streamCliPrompt } from "@/lib/core/cli-stream";
 
 // AI search orchestrates modes/discover.md by running the USER'S configured CLI
 // headless (CLI-agnostic, like the assistant). Web hunting is slow → generous
 // budget. The agent is a PROPOSER: Write/Edit/Bash are disabled so it structurally
 // cannot persist; the only writes happen when the user later ADDs a candidate.
+// The spawn + stream transport lives in lib/core/cli-stream.ts, shared with the
+// Deep search route.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 600;
@@ -38,10 +39,6 @@ export async function POST(req: Request) {
   const cliId = body.cliId;
   if (!query || !cliId) return Response.json({ error: "query and cliId required" }, { status: 400 });
 
-  const resolved = resolveCli(cliId);
-  if (!resolved) return Response.json({ error: `CLI '${cliId}' not found on this machine` }, { status: 404 });
-  const { spec, binPath } = resolved;
-
   // Read the CANONICAL mode at request time — single source of truth, never a
   // homegrown prompt. Missing (older core) → graceful 400 so the Scan tab stays usable.
   let mode: string;
@@ -57,168 +54,7 @@ export async function POST(req: Request) {
   const knownBlock = lines.length ? `\n\n--- ALREADY KNOWN (dedup — do NOT propose these) ---\n${lines.join("\n")}` : "";
   const prompt = `${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${query}\n`;
 
-  const isClaude = cliId === "claude";
-  const args = isClaude
-    ? [
-        "-p",
-        prompt,
-        "--model",
-        "claude-fable-5",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--include-partial-messages",
-        "--permission-mode",
-        "acceptEdits",
-        "--allowedTools",
-        "Read,WebFetch,WebSearch,Glob,Grep", // WebSearch ADDED vs the read-only assistant
-        "--disallowedTools",
-        "Bash,Write,Edit,NotebookEdit,Task", // proposer-not-writer, by construction
-      ]
-    : spec.args(prompt);
-
-  const child = spawn(binPath, args, { cwd: careerOpsRoot(), env: process.env });
-
-  const encoder = new TextEncoder();
-  // `closed` + kill timer in the OUTER scope so cancel() can flip `closed` before
-  // the child's late handlers run — otherwise they enqueue onto an already-closed
-  // controller and throw an uncaught "Controller is already closed" (see #1155).
-  let closed = false;
-  let killer: ReturnType<typeof setTimeout> | undefined;
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      let buf = "";
-      let emitted = false;
-      let lastSent = Date.now();
-      killer = setTimeout(() => {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
-      }, 480_000);
-      // Idempotent — must run on EVERY terminal path. In particular, when
-      // safeEnqueue's catch marks the stream closed, safeClose()'s !closed
-      // guard skips its body, which would otherwise leave the heartbeat
-      // interval firing forever.
-      const cleanupTimers = () => {
-        if (killer) clearTimeout(killer);
-        if (heartbeat) clearInterval(heartbeat);
-      };
-      const safeClose = () => {
-        cleanupTimers();
-        if (!closed) {
-          closed = true;
-          try {
-            controller.close();
-          } catch {
-            /* already closed */
-          }
-        }
-      };
-      const safeEnqueue = (s: string): boolean => {
-        if (closed || !s) return false;
-        try {
-          controller.enqueue(encoder.encode(s));
-          lastSent = Date.now();
-          return true;
-        } catch {
-          // Controller closed underneath us — stop, never crash. Nobody will
-          // consume further output, so reap the child now instead of waiting
-          // for the 480s killer (which cleanupTimers just cleared).
-          closed = true;
-          cleanupTimers();
-          try {
-            child.kill("SIGTERM");
-          } catch {
-            /* ignore */
-          }
-          return false;
-        }
-      };
-      const emit = (s: string) => {
-        if (safeEnqueue(s)) emitted = true;
-      };
-
-      // WebKit (Safari / the desktop app's WKWebView) fails the whole fetch with
-      // a generic "Load failed" if the RESPONSE stays silent too long: headers
-      // don't flush until the first body byte, and NSURLSession's idle timeout
-      // (~60s) then kills the request — which an AI hunt trips easily during its
-      // opening web-search phase (stream-json events flow on stdout, but only
-      // text deltas are forwarded). Flush a byte immediately and keep the pipe
-      // warm whenever nothing has been SENT for a while. Whitespace-only chunks
-      // are invisible to the client parser; gating on sent-idle keeps a
-      // heartbeat from ever landing inside a split <<offer:…>> envelope (text
-      // deltas mid-envelope reset the timer as they're forwarded).
-      safeEnqueue("\n");
-      heartbeat = setInterval(() => {
-        if (!closed && Date.now() - lastSent >= 15_000) safeEnqueue("\n");
-      }, 15_000);
-
-      // A failed run (429 usage limit, auth expiry, …) produces NO text deltas —
-      // the CLI reports it as a synthetic final `result` with is_error. Hold the
-      // text and surface it on close, or the user sees a misleading generic guess.
-      let errorText = "";
-      child.stdout.on("data", (d: Buffer) => {
-        if (closed) return;
-        if (!isClaude) {
-          emit(d.toString());
-          return;
-        }
-        buf += d.toString();
-        let nl: number;
-        while ((nl = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, nl).trim();
-          buf = buf.slice(nl + 1);
-          if (!line) continue;
-          try {
-            const obj = JSON.parse(line);
-            if (obj.type === "stream_event" && obj.event?.type === "content_block_delta") {
-              const text = obj.event.delta?.text;
-              if (typeof text === "string") emit(text);
-            } else if (obj.type === "result" && obj.is_error && typeof obj.result === "string") {
-              errorText = obj.result;
-            }
-          } catch {
-            /* partial / non-json line — skip */
-          }
-        }
-      });
-      child.stderr.on("data", (d: Buffer) => {
-        const s = d.toString();
-        if (/error|not found|denied|fatal/i.test(s)) {
-          safeEnqueue(`\n[${spec.name}] ${s.trim()}\n`);
-        }
-      });
-      child.on("error", (e) => {
-        safeEnqueue(`\n[error launching ${spec.name}: ${e.message}]`);
-        safeClose();
-      });
-      child.on("close", () => {
-        if (!emitted) {
-          safeEnqueue(errorText ? `_(${spec.name}: ${errorText})_` : "_(no output — is the CLI authenticated?)_");
-        }
-        safeClose();
-      });
-    },
-    cancel() {
-      closed = true;
-      if (killer) clearTimeout(killer);
-      if (heartbeat) clearInterval(heartbeat);
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        /* ignore */
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  const result = streamCliPrompt({ prompt, cliId });
+  if (result.kind === "error") return Response.json(result.body, { status: result.status });
+  return result.response;
 }
