@@ -12,6 +12,7 @@ import { DiscoveringState } from "./discovering-state";
 import { AiHuntView } from "./ai-hunt-view";
 import { ExploreModeToggle } from "./explore-mode-toggle";
 import { AiSearchBox } from "./ai-search-box";
+import { DeepSearchBox } from "./deep-search-box";
 import { ResultsList, type EnrichedOffer } from "./results-list";
 import { useExplore } from "./explore-provider";
 
@@ -39,7 +40,7 @@ export function ExplorerView({
   rootExists: boolean;
   portalSources?: { boards: string[]; companies: number };
 }) {
-  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
+  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, discoverDeep, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
     companiesScanned > 0
       ? `Scanned ${companiesScanned.toLocaleString()}${companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} compan${companiesScanned === 1 ? "y" : "ies"}${partial ? " · some sources were unreachable" : ""}.`
@@ -97,7 +98,10 @@ export function ExplorerView({
   );
 
   const isAi = mode === "ai";
-  if (running) return isAi ? <AiHuntView cliName={cli.name} /> : <DiscoveringState />;
+  const isDeep = mode === "deep";
+  // Both agent surfaces stream the same trace, so they share the hunt view.
+  const isAgent = isAi || isDeep;
+  if (running) return isAgent ? <AiHuntView cliName={cli.name} /> : <DiscoveringState />;
 
   const canDiscover = filters.ats.length > 0 || filters.includePortals;
   const isResults = phase === "results";
@@ -119,7 +123,9 @@ export function ExplorerView({
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
             {isAi
               ? "Describe the role in plain language — an AI hunts the open web for it, on your own AI. Candidates are unverified until you evaluate."
-              : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
+              : isDeep
+                ? "Run the searches you saved in portals.yml. They reach the boards no scanner can — bot-walled, auth-gated, or browser-rendered. Candidates are unverified until you evaluate."
+                : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
           </p>
         )}
       </header>
@@ -130,7 +136,31 @@ export function ExplorerView({
         </div>
       )}
 
-      {isAi ? (
+      {isDeep ? (
+        phase === "blocked" ? (
+          <BlockedCard />
+        ) : (
+          <div className="space-y-6">
+            <DeepSearchBox
+              onSubmit={() => void discoverDeep()}
+              cliConfigured={!!cli.id}
+              cliName={cli.name}
+              onRunScan={() => setMode("scan")}
+            />
+            {phase === "results" && <ResultsList offers={enriched} />}
+            {phase === "empty-loose" && (
+              <EmptyState
+                tone="loose"
+                title="Your saved searches came back empty."
+                body="Search engines lag behind job boards. Try again later, or run the free Scan over the ATS network."
+                onRerun={() => setMode("scan")}
+                rerunLabel="Run the free Scan"
+              />
+            )}
+            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverDeep()} />}
+          </div>
+        )
+      ) : isAi ? (
         phase === "blocked" ? (
           <BlockedCard />
         ) : (

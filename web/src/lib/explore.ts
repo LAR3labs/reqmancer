@@ -22,6 +22,12 @@ export type ExploreFilters = {
   allow: string[];
   block: string[];
   alwaysAllow: string[];
+  /** Accept a location that is ONLY the word "Remote" — no city, country, or
+   *  region. Mirrors portals.yml `location_filter.allow_bare_remote` and
+   *  scan.mjs::buildLocationFilter. Without it, a US board that omits the
+   *  country (EchoJobs emits a bare "Remote") is treated exactly like a foreign
+   *  posting and dropped. */
+  allowBareRemote: boolean;
   sinceDays: number;
   ats: AtsSource[];
   limitPerAts: number;
@@ -36,6 +42,7 @@ export const DEFAULT_FILTERS: ExploreFilters = {
   allow: [],
   block: [],
   alwaysAllow: [],
+  allowBareRemote: false,
   sinceDays: 7,
   ats: [...ATS_SOURCES],
   limitPerAts: 150,
@@ -56,13 +63,17 @@ export const DEFAULT_FILTERS: ExploreFilters = {
  *   allow empty               → pass (block already cleared it)
  *   allow non-empty           → must hit at least one keyword
  */
+/** Anchored bare-"Remote" test. Keep in sync with scan.mjs::BARE_REMOTE_RE. */
+const BARE_REMOTE_RE = /^[\s\-\u2013\u2014(\[]*remote[\s\-\u2013\u2014.)\]]*$/i;
+
 export function buildLocationMatcher(
-  f: Pick<ExploreFilters, "allow" | "block" | "alwaysAllow">,
+  f: Pick<ExploreFilters, "allow" | "block" | "alwaysAllow"> & { allowBareRemote?: boolean },
 ): (location: string) => boolean {
   const norm = (list: string[]) => cleanFilterList(list).map((k) => k.toLowerCase());
   const alwaysAllow = norm(f.alwaysAllow);
   const allow = norm(f.allow);
   const block = norm(f.block);
+  const allowBareRemote = f.allowBareRemote === true;
   if (!alwaysAllow.length && !allow.length && !block.length) return () => true;
 
   return (location: string) => {
@@ -70,6 +81,7 @@ export function buildLocationMatcher(
     const lower = location.toLowerCase();
     if (alwaysAllow.length > 0 && alwaysAllow.some((k) => lower.includes(k))) return true;
     if (block.length > 0 && block.some((k) => lower.includes(k))) return false;
+    if (allowBareRemote && BARE_REMOTE_RE.test(location)) return true;
     if (allow.length === 0) return true;
     return allow.some((k) => lower.includes(k));
   };
@@ -102,8 +114,15 @@ export type DiscoveredOffer = {
   confidence?: "low" | "medium" | "high";
 };
 
-/** The two discovery surfaces: free deterministic Scan vs token-spending AI search. */
-export type ExploreMode = "scan" | "ai";
+/**
+ * The three discovery surfaces, ordered by cost:
+ *   scan — free, deterministic, config-driven (portals.yml + the ATS datasets)
+ *   deep — low token cost, runs the user's curated portals.yml `search_queries`
+ *          through the CLI's WebSearch; the only path that reaches bot-walled,
+ *          auth-gated, or client-rendered boards
+ *   ai   — higher token cost, free-text intent against the open web
+ */
+export type ExploreMode = "scan" | "deep" | "ai";
 
 /** Stream event grammar (NDJSON). `kind` discriminates. Discovery is FREE — the
  *  terminal `done` always carries cost {tokens:0, usd:0}. */
@@ -185,6 +204,12 @@ export function parseExplorePatch(
   if (raw.limit !== undefined) next.limitPerAts = clampNum(raw.limit, 50, 500, base.limitPerAts);
   if (raw.limitPerAts !== undefined) next.limitPerAts = clampNum(raw.limitPerAts, 50, 500, base.limitPerAts);
   if (raw.ats !== undefined) next.ats = cleanAts(raw.ats);
+  // Scalar boolean, so it can't ride the `lists` loop above. Without this the
+  // flag is dropped on every client→server round-trip and the Scan button
+  // enforces a stricter location policy than `node scan.mjs` does.
+  if (raw.allowBareRemote !== undefined) {
+    next.allowBareRemote = raw.allowBareRemote !== false && raw.allowBareRemote !== "0" && raw.allowBareRemote !== "false";
+  }
   if (raw.includePortals !== undefined) next.includePortals = raw.includePortals !== false && raw.includePortals !== "0" && raw.includePortals !== "false";
   return next;
 }

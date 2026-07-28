@@ -73,6 +73,8 @@ type ExploreCtx = {
   aiIntent: string;
   setAiIntent: (s: string) => void;
   discoverAI: () => Promise<void>;
+  /** Deep search — runs the user's curated portals.yml search_queries. */
+  discoverDeep: () => Promise<void>;
   aiTrace: AiTraceChunk[];
   aiCost: AiCost;
 };
@@ -411,11 +413,18 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // AI search — orchestrate modes/discover.md via the user's CLI, streamed.
-  const discoverAI = useCallback(async () => {
+  // Agent-backed discovery — orchestrate modes/discover.md via the user's CLI,
+  // streamed. TWO surfaces share this runner and differ only in what they send:
+  //   ai   → /api/explore/ai   with a free-text intent
+  //   deep → /api/explore/deep with no intent (the server supplies the user's own
+  //          curated portals.yml search_queries as the plan)
+  // Everything downstream — envelope parsing, known-URL dedup, the location
+  // policy, trace/cost accounting, phase machine — is identical, so it must not
+  // be duplicated: a fix applied to one surface has to reach both.
+  const runAgentSearch = useCallback(async (opts: { endpoint: string; source: string; requireIntent: boolean; casting: string }) => {
     if (runningRef.current) return;
     const intent = aiIntentRef.current.trim();
-    if (!intent) return;
+    if (opts.requireIntent && !intent) return;
     let cliId: string | null = null;
     try {
       cliId = JSON.parse(localStorage.getItem("career-ops:config") || "{}").cliId || null;
@@ -433,8 +442,12 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setAiTrace([]);
     setAiCost({ searches: 0, candidates: 0, fetches: 0 });
     setError("");
-    setStatus("Casting across the open web…");
-    if (typeof window !== "undefined") window.history.replaceState(null, "", `/explore?${aiToParams(intent)}`);
+    setStatus(opts.casting);
+    // Only the intent-driven surface is shareable via URL — Deep search has no
+    // query to encode, its plan lives in portals.yml.
+    if (typeof window !== "undefined" && opts.requireIntent) {
+      window.history.replaceState(null, "", `/explore?${aiToParams(intent)}`);
+    }
 
     let knownUrls = new Set<string>();
     try {
@@ -447,7 +460,11 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     // applies — it's a hard constraint, not a search term. filtersRef is seeded
     // from portals.yml on mount, so this is the same allow/block/always_allow the
     // deterministic scanners enforce.
-    const parser = makeAiStreamParser({ knownUrls, locationOk: buildLocationMatcher(filtersRef.current) });
+    const parser = makeAiStreamParser({
+      knownUrls,
+      locationOk: buildLocationMatcher(filtersRef.current),
+      source: opts.source,
+    });
 
     const acc: DiscoveredOffer[] = [];
     let sawError = "";
@@ -472,10 +489,10 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      const r = await fetch("/api/explore/ai", {
+      const r = await fetch(opts.endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: intent, cliId }),
+        body: JSON.stringify(opts.requireIntent ? { query: intent, cliId } : { cliId }),
       });
       if (r.status === 404) {
         runningRef.current = false;
@@ -484,7 +501,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       }
       if (r.status === 400) {
         const d = await r.json().catch(() => ({}));
-        sawError = d.error || "AI search isn't available.";
+        sawError = d.error || "This search isn't available.";
       } else if (!r.body) {
         sawError = "No response stream.";
       } else {
@@ -520,6 +537,30 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const discoverAI = useCallback(
+    () =>
+      runAgentSearch({
+        endpoint: "/api/explore/ai",
+        source: "ai-search",
+        requireIntent: true,
+        casting: "Casting across the open web…",
+      }),
+    [runAgentSearch],
+  );
+
+  // Deep search needs no intent — the plan is the user's own curated
+  // portals.yml search_queries, assembled server-side.
+  const discoverDeep = useCallback(
+    () =>
+      runAgentSearch({
+        endpoint: "/api/explore/deep",
+        source: "deep-search",
+        requireIntent: false,
+        casting: "Running your curated searches…",
+      }),
+    [runAgentSearch],
+  );
+
   // Switch surface but PRESERVE the current results + filters — toggling scan↔AI must
   // not throw away a completed search (disc#5). A new search (discover/discoverAI)
   // clears + repopulates; an explicit reset() clears. Just stop any half-run.
@@ -540,7 +581,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       snap = null;
     }
     if (!snap || snap.v !== 1 || !Array.isArray(snap.offers)) return;
-    setModeState(snap.mode === "ai" ? "ai" : "scan");
+    // Validate against the full mode set — an allowlist that forgets a mode
+    // silently drops the user back to Scan on every reload.
+    setModeState(snap.mode === "ai" || snap.mode === "deep" || snap.mode === "scan" ? snap.mode : "scan");
     setOffers(snap.offers);
     setMatchCount(typeof snap.matchCount === "number" ? snap.matchCount : snap.offers.length);
     setCompaniesScanned(snap.companiesScanned ?? 0);
@@ -584,9 +627,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       running: phase === "casting" || phase === "scanning" || phase === "revealing" || phase === "hunting",
       offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing,
       discover, addToPipeline, dismiss, applyPatch, reset,
-      mode, setMode, aiIntent, setAiIntent, discoverAI, aiTrace, aiCost,
+      mode, setMode, aiIntent, setAiIntent, discoverAI, discoverDeep, aiTrace, aiCost,
     }),
-    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing, discover, addToPipeline, dismiss, applyPatch, reset, mode, setMode, aiIntent, discoverAI, aiTrace, aiCost],
+    [filters, setFilters, initFilters, phase, offers, sources, matchCount, companiesScanned, companiesAvailable, capHit, droppedNoDate, status, partial, error, added, adding, dismissed, dismissing, discover, addToPipeline, dismiss, applyPatch, reset, mode, setMode, aiIntent, discoverAI, discoverDeep, aiTrace, aiCost],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
