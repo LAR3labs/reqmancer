@@ -29,15 +29,47 @@ export async function POST(req: NextRequest) {
   }
 
   const encoder = new TextEncoder();
+  // `closed` + the heartbeat timer live in the OUTER scope so cancel() can stop
+  // them even after start() has walked away (same shape as lib/core/cli-stream.ts).
+  let closed = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (obj: unknown) => {
-        try {
-          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
-        } catch {
-          /* stream closed */
+      let lastSent = Date.now();
+      // Idempotent — must run on EVERY terminal path, including the
+      // enqueue-failure path, or the interval fires forever (cf. 8151723).
+      const cleanupTimers = () => {
+        if (heartbeat) {
+          clearInterval(heartbeat);
+          heartbeat = undefined;
         }
       };
+      const sendRaw = (s: string) => {
+        if (closed || !s) return;
+        try {
+          controller.enqueue(encoder.encode(s));
+          lastSent = Date.now();
+        } catch {
+          // Controller closed underneath us — stop, never crash.
+          closed = true;
+          cleanupTimers();
+        }
+      };
+      const send = (obj: unknown) => sendRaw(JSON.stringify(obj) + "\n");
+
+      // WebKit (Safari / the desktop app's WKWebView) fails the whole fetch with
+      // a generic "Load failed" if the RESPONSE stays silent for ~60s
+      // (NSURLSession's idle timeout). A free scan trips this easily: the Workday
+      // leg alone runs 30s+ without emitting an event, and a tightly-filtered
+      // search (few title matches) streams almost nothing for minutes. The
+      // CLI-backed routes got this fix in ae9dcd6 (see api/assistant/route.ts and
+      // api/run/route.ts); this route hand-rolls its stream and was left behind.
+      // Whitespace-only chunks are invisible to the client parser (discover() in
+      // components/explore/explore-provider.tsx skips empty lines).
+      heartbeat = setInterval(() => {
+        if (!closed && Date.now() - lastSent >= 15_000) sendRaw("\n");
+      }, 15_000);
+
       send({
         kind: "start",
         ats: filters.includePortals ? [...filters.ats, "portals"] : filters.ats,
@@ -69,7 +101,24 @@ export async function POST(req: NextRequest) {
         send({ kind: "error", message: err instanceof Error ? err.message : "discovery failed" } satisfies ScanEvent);
       }
       send({ kind: "done", count: offers.length, offers, cost: { tokens: 0, usd: 0 } } satisfies ScanEvent);
-      controller.close();
+      cleanupTimers();
+      if (!closed) {
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      }
+    },
+    // The client navigated away / aborted: stop the heartbeat so it can't
+    // outlive the request and enqueue onto a dead controller.
+    cancel() {
+      closed = true;
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = undefined;
+      }
     },
   });
 
