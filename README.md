@@ -1,4 +1,4 @@
-<h1 align="center">career-ops-lar3</h1>
+<h1 align="center">reqmancer</h1>
 
 <p align="center">
   <strong>A personal fork of <a href="https://github.com/santifer/career-ops">career-ops</a> by <a href="https://santifer.io">Santiago Fernández de Valderrama</a>.</strong><br>
@@ -119,8 +119,8 @@ claude   # or codex / qwen / opencode / agy / grok — open your AI CLI here
 <summary><b>Prefer to set it up manually? (git clone)</b></summary>
 
 ```bash
-git clone https://github.com/LAR3labs/career-ops-lar3.git
-cd career-ops-lar3 && npm install
+git clone https://github.com/LAR3labs/reqmancer.git
+cd reqmancer && npm install
 npx playwright install chromium   # only needed for PDF generation
 
 # 2. Check setup
