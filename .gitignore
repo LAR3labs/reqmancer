@@ -67,6 +67,7 @@ portals.yml
 modes/_profile.md
 modes/_custom.md
 voice-dna.md
+CLAUDE.local.md
 
 # Ad-hoc agent output at the repo root (PII). Named modes write to known
 # user-layer paths, but a free-form request ("analyze my pipeline") lets the
