@@ -1,68 +1,37 @@
-<h1 align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/wordmark-dark.svg"><img src="docs/wordmark-light.svg" alt="career-ops" width="250" height="56"></picture></h1>
-
-<div align="center">
-
-[English](README.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Português (Brasil)](README.pt-BR.md) | [한국어](README.ko-KR.md) | [日本語](README.ja.md) | [简体中文](README.cn.md) | [繁體中文](README.zh-TW.md) | [Українська](README.ua.md) | [Русский](README.ru.md) | [Polski](README.pl.md) | [Dansk](README.da.md) | [العربية](README.ar.md) | [हिन्दी](README.hi.md)
-
-</div>
+<h1 align="center">reqmancer</h1>
 
 <p align="center">
-  <a href="https://x.com/santifer"><img src="docs/hero-banner.jpg" alt="Career-Ops Multi-Agent Job Search System" width="800"></a>
-</p>
-
-<p align="center">
-  <em>I spent months applying to jobs the hard way. So I engineered the system I wish I had.</em><br>
-  Companies use AI to filter candidates. <strong>I just gave candidates AI to <em>choose</em> companies.</strong><br>
-  <em>Now it's open source.</em>
-</p>
-
-<p align="center">
-  <a href="https://trendshift.io/repositories/25195" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/25195" alt="santifer%2Fcareer-ops | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</p>
-
-<p align="center">
-  <a href="https://www.producthunt.com/products/santifer-io?utm_source=badge-featured&utm_medium=badge" target="_blank" rel="noopener noreferrer"><img src="docs/press/producthunt.svg" alt="Career-Ops on Claude | Product Hunt" style="width: 206px; height: 54px; vertical-align: middle;" width="206" height="54"/></a>
-</p>
-
-<p align="center"><sub>FEATURED IN</sub></p>
-
-<p align="center">
-  <a href="https://wired.com.gr/article/to-ai-ergaleio-pou-fernei-epanastasi-ston-tropo-pou-psachnoume-douleia/" rel="noopener noreferrer nofollow"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/press/wired-dark.svg"><img src="docs/press/wired.svg" alt="WIRED" height="32"></picture></a>
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.businessinsider.com/how-i-built-tool-filter-job-listings-landed-head-ai-2026-4" rel="noopener noreferrer nofollow"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/press/business-insider-dark.svg"><img src="docs/press/business-insider.svg" alt="Business Insider" height="32"></picture></a>
+  <strong>A personal fork of <a href="https://github.com/santifer/career-ops">career-ops</a> by <a href="https://santifer.io">Santiago Fernández de Valderrama</a>.</strong><br>
+  Not affiliated with, maintained by, or endorsed by the upstream project.<br>
+  For the original, the case study and the community, go to
+  <a href="https://github.com/santifer/career-ops"><strong>santifer/career-ops</strong></a>.
 </p>
 
 ---
 
 <p align="center">
+  <img src="docs/hero-banner.jpg" alt="Career-Ops Multi-Agent Job Search System" width="800">
+</p>
+
+<p align="center">
   <img src="docs/demo.gif" alt="Career-Ops Demo" width="800">
 </p>
 
-<p align="center"><strong>740+ job listings evaluated · 100+ personalized CVs · 1 dream role landed</strong></p>
+## What this fork changes
+
+Everything here is built on santifer's work. My changes sit on top of it:
+
+- Extra zero-token discovery providers, including BuiltIn Charlotte
+- Fixes to the agentic-jobs card parser and Hacker News thread discovery
+- A shared stealth configuration for all outbound Playwright launches
+- Deep search, a third Explore surface in the web UI
+- An opt-in `allow_bare_remote` location tier for portal scanning
+
+Everything below this line is upstream's documentation, lightly edited to
+point at this fork instead of the original.
 
 <p align="center">
-  <a href="https://warpchart.dev/hq">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://warpchart.dev/api/chart?theme=dark&v=3">
-      <img alt="Live star telemetry of santifer/career-ops" src="https://warpchart.dev/api/chart?theme=light&v=3" loading="lazy">
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://discord.gg/8pRpHETxa4"><img src="https://img.shields.io/badge/Join_the_community-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/santifer/career-ops/releases/latest"><img src="https://img.shields.io/npm/v/%40santifer%2Fcareer-ops?style=for-the-badge&labelColor=2b3137&color=2ea44f&label=release" alt="Latest release"></a>
-</p>
-
-<p align="center">
-  <a href="https://claude.com/claude-code"><img src="https://img.shields.io/badge/Built_with-Claude_Code-000?style=for-the-badge&logo=anthropic&logoColor=white" alt="Built with Claude Code"></a>
-</p>
-
-<p align="center">
-  <sub>Also runs on any agent-skill-standard CLI. See <a href="docs/SUPPORTED_CLIS.md">Supported CLIs</a>.</sub><br>
+  <sub>Runs on any agent-skill-standard CLI. See <a href="docs/SUPPORTED_CLIS.md">Supported CLIs</a>.</sub><br>
   <img src="https://img.shields.io/badge/Claude_Code-000?style=flat&logo=anthropic&logoColor=white" alt="Claude Code">
   <img src="https://img.shields.io/badge/OpenCode-111827?style=flat&logo=terminal&logoColor=white" alt="OpenCode">
   <img src="https://img.shields.io/badge/Antigravity_CLI-4285F4?style=flat&logo=google&logoColor=white" alt="Antigravity CLI">
@@ -79,6 +48,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT">
   <a href="TRADEMARK.md"><img src="https://img.shields.io/badge/Trademark-Policy-blue.svg" alt="Trademark Policy"></a>
 </p>
+
 
 ## What Is This
 
@@ -97,7 +67,7 @@ Career-ops is agentic: whichever AI coding CLI you choose navigates career pages
 
 > **Heads up: the first evaluations won't be great.** The system doesn't know you yet. Feed it context -- your CV, your career story, your proof points, your preferences, what you're good at, what you want to avoid. The more you nurture it, the better it gets. Think of it as onboarding a new recruiter: the first week they need to learn about you, then they become invaluable.
 
-Built by someone who used it to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. [Read the full case study](https://santifer.io/career-ops-system).
+Created by santifer, who used it to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. [Read the full case study](https://santifer.io/career-ops-system). This fork is my own build of that system; the track record above is his, not mine.
 
 ## The CareerOps Manifesto
 
@@ -123,7 +93,10 @@ career-ops is the first reference implementation of [the CareerOps Manifesto](ht
 
 ## Quick Start
 
-**Fastest way — one command:**
+> **Installing this fork?** The `npx` installer below fetches the *upstream*
+> release, not this fork. To get this fork, use the git clone steps.
+
+**Fastest way to install upstream — one command:**
 
 ```bash
 npx @santifer/career-ops init
@@ -146,8 +119,8 @@ claude   # or codex / qwen / opencode / agy / grok — open your AI CLI here
 <summary><b>Prefer to set it up manually? (git clone)</b></summary>
 
 ```bash
-git clone https://github.com/santifer/career-ops.git
-cd career-ops && npm install
+git clone https://github.com/LAR3labs/reqmancer.git
+cd reqmancer && npm install
 npx playwright install chromium   # only needed for PDF generation
 
 # 2. Check setup
@@ -439,15 +412,18 @@ No. career-ops is a filter, not a spray-and-pray auto-applier. The AI evaluates,
 **Is career-ops free and open source?**
 Yes. career-ops is free and open source, and for the candidate it always will be — it is the first reference implementation of the [CareerOps Manifesto](https://career-ops.org/manifesto). Read it, and if it says what you believe, sign it.
 
-## About the Author
+## Credit
 
-I'm [Santiago Fernández de Valderrama Aparicio](https://santifer.io/about) (santifer) -- Head of Applied AI, former founder (built and sold a business that still runs with my name on it). I built career-ops to manage my own job search. It worked: I used it to land my current role.
+career-ops was created by [Santiago Fernández de Valderrama Aparicio](https://santifer.io/about)
+(santifer) and built with [many contributors](https://github.com/santifer/career-ops/graphs/contributors).
+He built it to run his own job search, and used it to land his current role.
 
-Curious how this repo is maintained in ~4 hours a week? Read [Agentic maintenance: how career-ops is run by a fleet of AI agents](https://santifer.io/ai-agent-fleet).
+This repository is my personal fork. The design, the evaluation model, the
+modes, and the overwhelming majority of the code are his. The code is MIT
+licensed and the copyright stays with him. See [LICENSE](LICENSE).
 
-My portfolio and other open source projects → [santifer.io](https://santifer.io)
-
-Wikidata: [Santiago Fernández de Valderrama Aparicio](https://www.wikidata.org/wiki/Q138710224) · [career-ops](https://www.wikidata.org/wiki/Q139007988).
+The "career-ops" name and brand are covered separately by the project's
+[Trademark Policy](TRADEMARK.md). This fork claims no rights to either.
 
 ## Disclaimer
 
@@ -466,7 +442,9 @@ See [LEGAL_DISCLAIMER.md](LEGAL_DISCLAIMER.md) for full details. This software i
   <img src="https://contrib.rocks/image?repo=santifer/career-ops" />
 </a>
 
-Got hired using career-ops? [Share your story!](https://github.com/santifer/career-ops/issues/new?template=i-got-hired.yml)
+These are the contributors to the upstream project, whose work this fork is built on.
+
+Got hired using career-ops? [Share your story upstream.](https://github.com/santifer/career-ops/issues/new?template=i-got-hired.yml)
 
 ## License & Trademark
 
@@ -475,10 +453,11 @@ brand are governed by the [Trademark Policy](TRADEMARK.md), permissive
 for community use, reserved for commercial product naming and
 endorsement.
 
-## Let's Connect
+## Upstream
 
+This fork tracks [santifer/career-ops](https://github.com/santifer/career-ops).
+Issues, discussions, the Discord community and the roadmap all live there.
+
+[![Upstream](https://img.shields.io/badge/upstream-santifer%2Fcareer--ops-000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/santifer/career-ops)
 [![Website](https://img.shields.io/badge/santifer.io-000?style=for-the-badge&logo=safari&logoColor=white)](https://santifer.io)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/santifer)
-[![X](https://img.shields.io/badge/X-000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/santifer)
 [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/8pRpHETxa4)
-[![Email](https://img.shields.io/badge/Email-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:hi@santifer.io)

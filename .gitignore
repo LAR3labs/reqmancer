@@ -66,6 +66,17 @@ config/benchmarks.yml
 portals.yml
 modes/_profile.md
 modes/_custom.md
+voice-dna.md
+
+# Ad-hoc agent output at the repo root (PII). Named modes write to known
+# user-layer paths, but a free-form request ("analyze my pipeline") lets the
+# agent invent a filename and drop it here. These land untracked and look
+# harmless; they routinely contain skill-gap findings and pipeline contents.
+# Leading slash = repo root only, so docs/ and web/ are unaffected.
+/*analysis*.md
+/*analysis*.html
+/*-analysis.*
+/*gap-analysis*
 .update-dismissed
 .update-lock
 .manifesto-noted
