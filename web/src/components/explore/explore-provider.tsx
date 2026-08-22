@@ -444,9 +444,14 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setError("");
     setStatus(opts.casting);
     // Only the intent-driven surface is shareable via URL — Deep search has no
-    // query to encode, its plan lives in portals.yml.
-    if (typeof window !== "undefined" && opts.requireIntent) {
-      window.history.replaceState(null, "", `/explore?${aiToParams(intent)}`);
+    // query to encode, its plan lives in portals.yml. But Deep must still CLEAR
+    // a previous run's parameters rather than skip the rewrite: a stale
+    // ?mode=ai&intent=… survives into the next load, where ExplorerView reads it
+    // and calls setMode("ai") over the "deep" mode restored from the session
+    // snapshot — labelling rehydrated Deep results as found by AI.
+    if (typeof window !== "undefined") {
+      const qs = opts.requireIntent ? aiToParams(intent) : "";
+      window.history.replaceState(null, "", qs ? `/explore?${qs}` : "/explore");
     }
 
     let knownUrls = new Set<string>();

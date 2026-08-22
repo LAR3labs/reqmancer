@@ -23,7 +23,17 @@ html.dark .co-ailedger{color:hsl(26 86% 67%)}
 @media(prefers-reduced-motion:reduce){.co-aiorb__ring,.co-aiorb__glow{animation:none}}
 `;
 
-export function AiHuntView({ cliName }: { cliName?: string }) {
+// Both agent surfaces stream the same trace and share this view, so the copy is
+// parameterized: Deep search runs the user's saved portals.yml queries, not a
+// free-form crawl, and telling them it is "hunting the open web" describes a
+// surface they did not pick.
+const SURFACE_COPY = {
+  ai: { heading: "Hunting the open web", idle: "casting across the open web…", ledger: "searching the open web" },
+  deep: { heading: "Running your saved searches", idle: "working through portals.yml…", ledger: "running your saved searches" },
+} as const;
+
+export function AiHuntView({ cliName, surface = "ai" }: { cliName?: string; surface?: "ai" | "deep" }) {
+  const copy = SURFACE_COPY[surface];
   const { phase, matchCount, aiTrace, aiCost, offers } = useExplore();
   const shown = useCountUp(matchCount);
   const revealing = phase === "revealing";
@@ -42,16 +52,16 @@ export function AiHuntView({ cliName }: { cliName?: string }) {
 
         <div>
           <h2 className={`${instrumentSerif.className} text-3xl leading-tight text-foreground`}>
-            {matchCount > 0 ? `${shown} candidate${shown === 1 ? "" : "s"}` : "Hunting the open web"}
+            {matchCount > 0 ? `${shown} candidate${shown === 1 ? "" : "s"}` : copy.heading}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            {revealing ? "found — review them below" : matchCount > 0 ? "found so far · streaming in" : "casting across the public web…"}
+            {revealing ? "found — review them below" : matchCount > 0 ? "found so far · streaming in" : copy.idle}
           </p>
         </div>
 
         <div className="co-ailedger">
           <Sparkles className="size-3.5" />
-          {cliName || "your CLI"} · searching the open web
+          {cliName || "your CLI"} · {copy.ledger}
           {aiCost.searches > 0 && <span className="opacity-75">· {aiCost.searches} searches</span>}
           {matchCount > 0 && <span className="opacity-75">· {matchCount} found</span>}
         </div>

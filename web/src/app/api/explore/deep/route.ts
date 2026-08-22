@@ -45,10 +45,14 @@ is already decided. Do NOT invent your own queries or re-plan.
   companies.
 `;
 
+/** The GET response shape. Exported so DeepSearchBox imports it instead of
+ *  restating it — two declarations of the same wire shape drift silently. */
+export type DeepSearchPlan = { count: number; queries: string[]; hosts: string[] };
+
 /** What Deep search would run, so the UI can show the plan BEFORE spending. */
 export async function GET() {
   const queries = readSearchQueries();
-  return Response.json({
+  const plan: DeepSearchPlan = {
     count: queries.length,
     queries: queries.map((q) => q.name),
     // The distinct hosts these queries target — the coverage story in one line.
@@ -57,7 +61,8 @@ export async function GET() {
         queries.flatMap((q) => [...q.query.matchAll(/site:([\w.*-]+)/g)].map((m) => m[1].replace(/^\*\./, ""))),
       ),
     ],
-  });
+  };
+  return Response.json(plan);
 }
 
 export async function POST(req: Request) {

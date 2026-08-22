@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Telescope } from "lucide-react";
 import { CostBadge } from "@/components/cost/cost-badge";
-
-type Plan = { count: number; queries: string[]; hosts: string[] };
+// The route owns the wire shape; importing it means a field added there is a
+// compile error here rather than a silent drift.
+import type { DeepSearchPlan } from "@/app/api/explore/deep/route";
 
 // Deep search has no input to fill in — the plan is the user's own curated
 // `search_queries` from portals.yml. So the box's whole job is to SHOW the plan
@@ -22,14 +23,14 @@ export function DeepSearchBox({
   cliName?: string;
   onRunScan: () => void;
 }) {
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [plan, setPlan] = useState<DeepSearchPlan | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let live = true;
     fetch("/api/explore/deep")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("plan unavailable"))))
-      .then((d: Plan) => {
+      .then((d: DeepSearchPlan) => {
         if (live) setPlan(d);
       })
       .catch(() => {

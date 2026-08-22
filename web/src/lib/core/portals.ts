@@ -129,19 +129,28 @@ export { listFrom as normalizeKeywords };
  * Before Deep search existed they were read only by agent `scan` mode Level 3,
  * which in practice never ran, so the coverage was configured but dead.
  *
- * Disabled entries are skipped. Returns [] on a bare or malformed checkout.
+ * Disabled entries are skipped, and so are duplicate queries: the Deep search
+ * route puts every returned query in the prompt and the agent runs the list in
+ * order, so a query repeated across two portals.yml entries is paid for twice
+ * for the same results. First occurrence wins, keeping its name.
+ *
+ * Returns [] on a bare or malformed checkout.
  */
 export function readSearchQueries(): Array<{ name: string; query: string }> {
   const portals = loadYaml("portals.yml");
   const raw = portals?.search_queries;
   if (!Array.isArray(raw)) return [];
   const out: Array<{ name: string; query: string }> = [];
+  const seen = new Set<string>();
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as Record<string, unknown>;
     if (e.enabled === false) continue;
     const query = typeof e.query === "string" ? e.query.trim() : "";
     if (!query) continue;
+    const key = query.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
     const name = typeof e.name === "string" && e.name.trim() ? e.name.trim() : query.slice(0, 60);
     out.push({ name, query });
   }

@@ -101,7 +101,7 @@ export function ExplorerView({
   const isDeep = mode === "deep";
   // Both agent surfaces stream the same trace, so they share the hunt view.
   const isAgent = isAi || isDeep;
-  if (running) return isAgent ? <AiHuntView cliName={cli.name} /> : <DiscoveringState />;
+  if (running) return isAgent ? <AiHuntView cliName={cli.name} surface={isDeep ? "deep" : "ai"} /> : <DiscoveringState />;
 
   const canDiscover = filters.ats.length > 0 || filters.includePortals;
   const isResults = phase === "results";
@@ -138,7 +138,7 @@ export function ExplorerView({
 
       {isDeep ? (
         phase === "blocked" ? (
-          <BlockedCard />
+          <BlockedCard surface="deep" />
         ) : (
           <div className="space-y-6">
             <DeepSearchBox
@@ -399,13 +399,16 @@ function FailedCard({ msg, onRetry }: { msg: string; onRetry: () => void }) {
   );
 }
 
-function BlockedCard() {
+// Shared by both agent surfaces, so it names the one the user actually chose.
+const BLOCKED_TITLE = { ai: "AI search needs a CLI", deep: "Deep search needs a CLI" } as const;
+
+function BlockedCard({ surface = "ai" }: { surface?: "ai" | "deep" }) {
   return (
     <div className="rounded-2xl border border-border bg-surface/30 px-6 py-12 text-center">
       <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
         <Sparkles className="size-6" />
       </div>
-      <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>AI search needs a CLI</h2>
+      <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>{BLOCKED_TITLE[surface]}</h2>
       <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">
         Connect Claude Code, Gemini, or any agent CLI — your key, your tokens, your machine. The free Scan stays available without one.
       </p>

@@ -202,10 +202,15 @@ async function extractPipelineEntries() {
 
 // ── Core archive function ────────────────────────────────────────────────────
 
-async function archiveUrl(browser, url, { company: companyHint, role: roleHint } = {}) {
+// Takes a stealth CONTEXT, not the raw browser: launchStealthBrowser only sets
+// up the launch flags, so a page opened with browser.newPage() gets the default
+// context and none of newStealthContext's derived UA, locale, viewport, or init
+// script. Archiving is an outbound flow like any other and meets the same
+// challenge walls, so it goes through the shared context.
+async function archiveUrl(context, url, { company: companyHint, role: roleHint } = {}) {
   console.log(`\n🔗  ${url}`);
 
-  const page = await browser.newPage();
+  const page = await context.newPage();
 
   try {
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -302,12 +307,13 @@ async function main() {
     }
   } else {
     // Sequential — project convention: never Playwright in parallel
-    const { launchStealthBrowser } = await import('./browser-launch.mjs');
+    const { launchStealthBrowser, newStealthContext } = await import('./browser-launch.mjs');
     const { browser } = await launchStealthBrowser();
+    const context = await newStealthContext(browser);
     try {
       for (const { url, company, role } of targets) {
         try {
-          const result = await archiveUrl(browser, url, { company, role });
+          const result = await archiveUrl(context, url, { company, role });
           results.push(result);
         } catch (err) {
           console.error(`   ❌  Failed: ${err.message.split('\n')[0]}`);

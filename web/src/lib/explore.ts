@@ -226,6 +226,12 @@ export function filtersToParams(f: ExploreFilters): string {
   if (f.ats.length !== ATS_SOURCES.length) sp.set("ats", f.ats.join(","));
   if (f.limitPerAts !== DEFAULT_FILTERS.limitPerAts) sp.set("limit", String(f.limitPerAts));
   if (!f.includePortals) sp.set("portals", "0");
+  // Scalar, so it rides neither the list block above nor the DEFAULT compare
+  // pattern cleanly — it needs its own line at BOTH ends of the codec. Without
+  // the write, the provider's post-scan URL rewrite drops the flag and the next
+  // load re-reads DEFAULT_FILTERS.allowBareRemote === false, so the web Scan
+  // silently enforces a stricter location policy than `node scan.mjs`.
+  if (f.allowBareRemote) sp.set("bare", "1");
   return sp.toString();
 }
 
@@ -242,6 +248,7 @@ export function paramsToFilters(sp: URLSearchParams, base: ExploreFilters = DEFA
       ats: split(sp.get("ats")),
       limit: sp.get("limit") ?? undefined,
       includePortals: sp.get("portals") ?? undefined,
+      allowBareRemote: sp.get("bare") ?? undefined,
     },
     base,
   );

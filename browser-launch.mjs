@@ -39,6 +39,10 @@
 
 import { chromium } from 'playwright';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+/** Repo root, derived from this module rather than the caller's cwd. */
+const MODULE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 /** Chrome launch flags. Deliberately minimal — each one earns its place. */
 export const STEALTH_ARGS = [
@@ -60,7 +64,10 @@ const IS_WIN = process.platform === 'win32';
  * Where the persistent Chrome profile lives.
  *
  * Sits under `.career-ops-web/` next to logo-cache — both are machine-local
- * caches, and .gitignore covers this path explicitly. It holds cookies for every
+ * caches, and .gitignore covers this path explicitly. Anchored to THIS module's
+ * directory, not process.cwd(): a script run from a nested directory would
+ * otherwise write the profile outside the ignored path and leave its cookies as
+ * untracked files. It holds cookies for every
  * site the scanner visits (including any WAF clearance tokens, which is the
  * entire point), so it must never be committed or shared.
  *
@@ -69,7 +76,7 @@ const IS_WIN = process.platform === 'win32';
  * persistent path is opt-in per call site rather than the global default.
  * Deleting the directory is always safe — it rebuilds on next use.
  */
-export const DEFAULT_PROFILE_DIR = path.join(process.cwd(), '.career-ops-web', 'browser-profile');
+export const DEFAULT_PROFILE_DIR = path.join(MODULE_ROOT, '.career-ops-web', 'browser-profile');
 
 /** Platform token for the UA string, matching the host OS. */
 function uaPlatform() {
