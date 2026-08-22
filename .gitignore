@@ -66,6 +66,7 @@ config/benchmarks.yml
 portals.yml
 modes/_profile.md
 modes/_custom.md
+voice-dna.md
 .update-dismissed
 .update-lock
 .manifesto-noted
