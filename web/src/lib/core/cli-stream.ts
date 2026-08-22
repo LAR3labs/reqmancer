@@ -30,8 +30,12 @@ export function streamCliPrompt({ prompt, cliId }: { prompt: string; cliId: stri
     ? [
         "-p",
         prompt,
+        // Pinned to a full model ID, not the `opus` alias: an alias re-points
+        // itself when a new Opus ships, so a discovery run's cost and behaviour
+        // would change under the user without a commit. Only the claude branch
+        // sets a model at all — every other CLI uses its own default.
         "--model",
-        "claude-fable-5",
+        "claude-opus-5",
         "--output-format",
         "stream-json",
         "--verbose",
