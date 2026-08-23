@@ -24,22 +24,22 @@ import { pass, fail, ROOT } from './helpers.mjs';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-/** Drop line and block comments so prose about a flag can't satisfy a check. */
-const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+/** Drop block and line comments so prose about a flag can't satisfy a check. */
+const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
 /**
  * The executable body of a top-level function, comments removed.
  *
- * Both files declare top-level functions at column 0 and close them with a `}`
- * at column 0, so the closing brace is an unambiguous terminator — no brace
- * counting needed. Throws when the function is gone, which is itself the drift
- * this suite exists to catch.
+ * These source files keep top-level functions at column 0. Match the closing
+ * brace at the same indentation so an inner block cannot truncate the check.
+ * Throws when the function is gone or no closing brace exists.
  */
 function fnBody(src, name) {
   const start = src.search(new RegExp(`^(?:export )?(?:async )?function ${name}\\b`, 'm'));
   if (start === -1) throw new Error(`function ${name} not found`);
   const end = src.indexOf('\n}', start);
-  return stripComments(src.slice(start, end === -1 ? src.length : end + 2));
+  if (end === -1) throw new Error(`function ${name} has no top-level closing brace`);
+  return stripComments(src.slice(start, end + 2));
 }
 
 console.log('\nWeb ↔ core location-filter parity');

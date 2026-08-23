@@ -66,11 +66,14 @@ export function ExplorerView({
     inited.current = true;
     const sp = new URLSearchParams(window.location.search);
     const ai = paramsToAi(sp);
+    // Agent results still obey the same hard location policy as Scan. Seed the
+    // filters before selecting a surface, and use portals.yml as the base so a
+    // link containing only mode/intent does not fall back to empty defaults.
+    initFilters(paramsToFilters(sp, seed.filters));
     if (ai !== null) {
       setMode("ai");
       setAiIntent(ai);
     } else {
-      initFilters(sp.toString() ? paramsToFilters(sp) : seed.filters);
       // Onboarding hand-off: ?run=1 auto-fires the free scan + flags the first-run
       // banner (the "matches found from your CV, free" reveal).
       if (sp.get("run") === "1") {

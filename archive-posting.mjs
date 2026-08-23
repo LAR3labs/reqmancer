@@ -309,8 +309,10 @@ async function main() {
     // Sequential — project convention: never Playwright in parallel
     const { launchStealthBrowser, newStealthContext } = await import('./browser-launch.mjs');
     const { browser } = await launchStealthBrowser();
-    const context = await newStealthContext(browser);
     try {
+      // Context creation belongs inside the cleanup boundary. If Playwright
+      // rejects the context options, the launched Chrome process still closes.
+      const context = await newStealthContext(browser);
       for (const { url, company, role } of targets) {
         try {
           const result = await archiveUrl(context, url, { company, role });

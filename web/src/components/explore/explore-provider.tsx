@@ -443,15 +443,20 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     setAiCost({ searches: 0, candidates: 0, fetches: 0 });
     setError("");
     setStatus(opts.casting);
-    // Only the intent-driven surface is shareable via URL — Deep search has no
-    // query to encode, its plan lives in portals.yml. But Deep must still CLEAR
-    // a previous run's parameters rather than skip the rewrite: a stale
-    // ?mode=ai&intent=… survives into the next load, where ExplorerView reads it
-    // and calls setMode("ai") over the "deep" mode restored from the session
-    // snapshot — labelling rehydrated Deep results as found by AI.
+    // Preserve the filter codec while changing agent surfaces. Deep has no
+    // intent to encode, but it must remove stale AI parameters or a reload will
+    // restore AI mode over the settled Deep snapshot. Replacing the whole query
+    // string would fix that stale mode at the cost of losing the user's filters.
     if (typeof window !== "undefined") {
-      const qs = opts.requireIntent ? aiToParams(intent) : "";
-      window.history.replaceState(null, "", qs ? `/explore?${qs}` : "/explore");
+      const sp = new URLSearchParams(window.location.search);
+      sp.delete("mode");
+      sp.delete("intent");
+      if (opts.requireIntent) {
+        const ai = new URLSearchParams(aiToParams(intent));
+        for (const [key, value] of ai) sp.set(key, value);
+      }
+      const qs = sp.toString();
+      window.history.replaceState(null, "", `/explore${qs ? `?${qs}` : ""}`);
     }
 
     let knownUrls = new Set<string>();
