@@ -384,13 +384,16 @@ language.
 
 Every AI agent that interacts with a PR must leave one comment for its work
 session. This applies when the agent reviews, pushes commits, changes PR
-metadata, closes, or merges. Put the model first so it is easy to spot, then
-explain what the agent did and why. Never post a model tag with no context.
+metadata, closes, or merges. Keep the main summary focused on the change. Put
+model attribution in its own section and scope it to the action covered by that
+comment. Do not list every model that ever touched the PR.
 
 ```markdown
 ## Model used
 
 **GPT-5 Codex**
+
+Final review and merge.
 
 ## What I did
 
@@ -399,13 +402,16 @@ suite before pushing.
 ```
 
 Codex agents use their current Codex model name. Claude Code agents use their
-current Claude model name. Include the reasoning level below the model only when
-the runtime exposes it. Never guess the model or reasoning level. One comment
-may cover several actions by the same model in the same work session.
+current Claude model name. Include the reasoning level only when the runtime
+exposes it. Never guess the model or reasoning level. If more than one model
+actually performed the action, give each model one short line stating its part.
+Otherwise list only the model that performed the current review, push, or merge.
+One comment may cover several actions by the same model in the same work session.
 
 When an agent merges, the comment must also include a `## Merge summary` section
 that any reader can understand. State what the merge changes, why it matters,
-and the validation result. Keep implementation details secondary.
+and the validation result. Keep implementation details secondary and keep model
+names out of the merge summary itself.
 
 ## Community and Governance
 
