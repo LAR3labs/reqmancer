@@ -416,7 +416,8 @@ async function filterLive(offers) {
     );
   }
   console.error(`\nVerifying liveness of ${offers.length} match(es) with Playwright (sequential)...`);
-  const browser = await chromium.launch({ headless: true });
+  const { launchStealthBrowser } = await import('./browser-launch.mjs');
+  const { browser } = await launchStealthBrowser();
   const live = [];
   try {
     const page = await newLivenessPage(browser);

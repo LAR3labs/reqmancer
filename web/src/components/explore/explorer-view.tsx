@@ -12,6 +12,7 @@ import { DiscoveringState } from "./discovering-state";
 import { AiHuntView } from "./ai-hunt-view";
 import { ExploreModeToggle } from "./explore-mode-toggle";
 import { AiSearchBox } from "./ai-search-box";
+import { DeepSearchBox } from "./deep-search-box";
 import { ResultsList, type EnrichedOffer } from "./results-list";
 import { useExplore } from "./explore-provider";
 
@@ -39,7 +40,7 @@ export function ExplorerView({
   rootExists: boolean;
   portalSources?: { boards: string[]; companies: number };
 }) {
-  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
+  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, discoverDeep, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
     companiesScanned > 0
       ? `Scanned ${companiesScanned.toLocaleString()}${companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} compan${companiesScanned === 1 ? "y" : "ies"}${partial ? " · some sources were unreachable" : ""}.`
@@ -65,11 +66,14 @@ export function ExplorerView({
     inited.current = true;
     const sp = new URLSearchParams(window.location.search);
     const ai = paramsToAi(sp);
+    // Agent results still obey the same hard location policy as Scan. Seed the
+    // filters before selecting a surface, and use portals.yml as the base so a
+    // link containing only mode/intent does not fall back to empty defaults.
+    initFilters(paramsToFilters(sp, seed.filters));
     if (ai !== null) {
       setMode("ai");
       setAiIntent(ai);
     } else {
-      initFilters(sp.toString() ? paramsToFilters(sp) : seed.filters);
       // Onboarding hand-off: ?run=1 auto-fires the free scan + flags the first-run
       // banner (the "matches found from your CV, free" reveal).
       if (sp.get("run") === "1") {
@@ -97,7 +101,10 @@ export function ExplorerView({
   );
 
   const isAi = mode === "ai";
-  if (running) return isAi ? <AiHuntView cliName={cli.name} /> : <DiscoveringState />;
+  const isDeep = mode === "deep";
+  // Both agent surfaces stream the same trace, so they share the hunt view.
+  const isAgent = isAi || isDeep;
+  if (running) return isAgent ? <AiHuntView cliName={cli.name} surface={isDeep ? "deep" : "ai"} /> : <DiscoveringState />;
 
   const canDiscover = filters.ats.length > 0 || filters.includePortals;
   const isResults = phase === "results";
@@ -119,7 +126,9 @@ export function ExplorerView({
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted">
             {isAi
               ? "Describe the role in plain language — an AI hunts the open web for it, on your own AI. Candidates are unverified until you evaluate."
-              : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
+              : isDeep
+                ? "Run the searches you saved in portals.yml. They reach the boards no scanner can — bot-walled, auth-gated, or browser-rendered. Candidates are unverified until you evaluate."
+                : "Scan the public ATS network — Greenhouse, Lever, Ashby, Workday. Fresh postings matched to you, zero tokens. You only spend when you choose to evaluate one."}
           </p>
         )}
       </header>
@@ -130,7 +139,31 @@ export function ExplorerView({
         </div>
       )}
 
-      {isAi ? (
+      {isDeep ? (
+        phase === "blocked" ? (
+          <BlockedCard surface="deep" />
+        ) : (
+          <div className="space-y-6">
+            <DeepSearchBox
+              onSubmit={() => void discoverDeep()}
+              cliConfigured={!!cli.id}
+              cliName={cli.name}
+              onRunScan={() => setMode("scan")}
+            />
+            {phase === "results" && <ResultsList offers={enriched} />}
+            {phase === "empty-loose" && (
+              <EmptyState
+                tone="loose"
+                title="Your saved searches came back empty."
+                body="Search engines lag behind job boards. Try again later, or run the free Scan over the ATS network."
+                onRerun={() => setMode("scan")}
+                rerunLabel="Run the free Scan"
+              />
+            )}
+            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverDeep()} />}
+          </div>
+        )
+      ) : isAi ? (
         phase === "blocked" ? (
           <BlockedCard />
         ) : (
@@ -369,13 +402,16 @@ function FailedCard({ msg, onRetry }: { msg: string; onRetry: () => void }) {
   );
 }
 
-function BlockedCard() {
+// Shared by both agent surfaces, so it names the one the user actually chose.
+const BLOCKED_TITLE = { ai: "AI search needs a CLI", deep: "Deep search needs a CLI" } as const;
+
+function BlockedCard({ surface = "ai" }: { surface?: "ai" | "deep" }) {
   return (
     <div className="rounded-2xl border border-border bg-surface/30 px-6 py-12 text-center">
       <div className="mx-auto grid size-12 place-items-center rounded-full bg-brand-soft text-brand">
         <Sparkles className="size-6" />
       </div>
-      <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>AI search needs a CLI</h2>
+      <h2 className={`${instrumentSerif.className} mt-4 text-2xl text-foreground`}>{BLOCKED_TITLE[surface]}</h2>
       <p className="mx-auto mt-1.5 max-w-md text-sm text-muted">
         Connect Claude Code, Gemini, or any agent CLI — your key, your tokens, your machine. The free Scan stays available without one.
       </p>

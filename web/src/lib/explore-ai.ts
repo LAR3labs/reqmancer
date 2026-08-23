@@ -24,7 +24,7 @@ export function canon(u: string): string {
   }
 }
 
-function toOffer(raw: unknown): DiscoveredOffer | null {
+function toOffer(raw: unknown, source: string): DiscoveredOffer | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const url = typeof o.url === "string" ? o.url.trim() : "";
@@ -38,7 +38,10 @@ function toOffer(raw: unknown): DiscoveredOffer | null {
     location: str(o.location),
     postedAt: "", // AI gives only a human postedHint, never a trustworthy date
     ats: str(o.ats) || "other",
-    source: "ai-search",
+    // Trusted from the CALLER, never from the agent's own envelope — the source
+    // is what lands in data/scan-history.tsv, so "which surface found this" must
+    // stay attributable (ai-search vs deep-search) for later pattern analysis.
+    source,
     verification: "unconfirmed",
     why: str(o.why) || undefined,
     postedHint: str(o.postedHint) || undefined,
@@ -54,9 +57,13 @@ export function makeAiStreamParser(opts?: {
    *  can't confirm, so without this an explicitly-blocked region lands in results.
    *  Rejected offers are counted, not silently vanished, so the UI can say why. */
   locationOk?: (location: string) => boolean;
+  /** Which Explore surface is streaming — stamped onto every offer. Defaults to
+   *  "ai-search"; the Deep search tab passes "deep-search". */
+  source?: string;
 }) {
   const known = opts?.knownUrls ?? new Set<string>();
   const locationOk = opts?.locationOk ?? (() => true);
+  const source = opts?.source || "ai-search";
   const seen = new Set<string>();
   let rejectedByLocation = 0;
   let buf = "";
@@ -102,7 +109,7 @@ export function makeAiStreamParser(opts?: {
         buf = buf.slice(close + CLOSE.length);
         let offer: DiscoveredOffer | null = null;
         try {
-          offer = toOffer(JSON.parse(json));
+          offer = toOffer(JSON.parse(json), source);
         } catch {
           offer = null;
         }

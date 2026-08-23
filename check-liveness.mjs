@@ -25,6 +25,7 @@ import {
   sleep,
 } from './liveness-browser.mjs';
 import { checkLivenessViaApi } from './liveness-api.mjs';
+import { launchStealthBrowser } from './browser-launch.mjs';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -65,7 +66,7 @@ async function main() {
   let browser = null, page = null, headed = null;
   async function ensureBrowser() {
     if (browser) return;
-    browser = await chromium.launch({ headless: true });
+    ({ browser } = await launchStealthBrowser());
     page = await newLivenessPage(browser);
     headed = noFallback ? null : createHeadedPageProvider(chromium);
   }

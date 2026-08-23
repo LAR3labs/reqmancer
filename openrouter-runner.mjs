@@ -393,8 +393,9 @@ async function fetchJobPage(url) {
   if (chromium) {
     let browser;
     try {
-      browser = await chromium.launch({ headless: true });
-      const page = await browser.newPage();
+      const { launchStealthBrowser, newStealthPage } = await import('./browser-launch.mjs');
+      ({ browser } = await launchStealthBrowser());
+      const page = await newStealthPage(browser);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
       await page.waitForTimeout(2000); // wait for SPA render
       const text = await page.evaluate(() => {

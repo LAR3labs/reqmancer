@@ -12,7 +12,9 @@ export type EnrichedOffer = DiscoveredOffer & { inPipeline: boolean; evaluatedN?
 
 export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
   const { companiesScanned, partial, addToPipeline, added, dismissed, dismissing, mode } = useExplore();
-  const isAi = mode === "ai";
+  // Both agent surfaces (AI search, Deep search) yield UNVERIFIED candidates and
+  // cost tokens; only the deterministic Scan is free and pre-verified.
+  const isAgent = mode === "ai" || mode === "deep";
   const [sort, setSort] = useState<"fresh" | "company">("fresh");
   const [q, setQ] = useState("");
 
@@ -42,12 +44,14 @@ export function ResultsList({ offers }: { offers: EnrichedOffer[] }) {
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <p className="text-sm text-foreground">
-            <span className="font-semibold">{visible.length}</span> {isAi ? `candidate${visible.length === 1 ? "" : "s"}` : `fresh role${visible.length === 1 ? "" : "s"}`}
-            <CostBadge kind={isAi ? "spend" : "free-network"} size="xs" className="ml-2 align-middle" />
+            <span className="font-semibold">{visible.length}</span> {isAgent ? `candidate${visible.length === 1 ? "" : "s"}` : `fresh role${visible.length === 1 ? "" : "s"}`}
+            <CostBadge kind={isAgent ? "spend" : "free-network"} size="xs" className="ml-2 align-middle" />
           </p>
           <p className="text-[12px] text-faint">
-            {isAi
-              ? "found by AI on the open web · unverified until you evaluate"
+            {isAgent
+              ? mode === "deep"
+                ? "found by your saved searches · unverified until you evaluate"
+                : "found by AI on the open web · unverified until you evaluate"
               : `${companiesScanned > 0 ? `${companiesScanned.toLocaleString()} companies scanned · ` : ""}0 tokens spent${partial ? " · some boards were unreachable (normal for public directories)" : ""}`}
           </p>
         </div>

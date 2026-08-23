@@ -375,6 +375,24 @@ These are two separate axes:
 - **Dependabot** monitors npm, Go modules, and GitHub Actions for security updates
 - **Contributing process**: issue first → discussion → PR with linked issue → CI passes → maintainer review → merge
 
+### GitHub agent attribution
+
+Every AI agent that interacts with a pull request must leave one short PR
+comment for its work session. This applies when the agent comments, reviews,
+pushes commits, changes PR metadata, closes, or merges. Use the model that
+actually performed the work and never guess a model name or reasoning level.
+
+```text
+<Model Used: GPT-5 Codex>
+<Model Used: Opus 5>
+<Model Used: GPT-5 Codex | Reasoning: high>
+```
+
+Codex agents use their current Codex model name. Claude Code agents use their
+current Claude model name. Include `Reasoning` only when the runtime exposes it.
+One note may cover several actions by the same model in the same work session;
+do not post a separate attribution comment for every API call.
+
 ## Community and Governance
 
 - **Code of Conduct**: Contributor Covenant 2.1 with enforcement actions (see `CODE_OF_CONDUCT.md`)

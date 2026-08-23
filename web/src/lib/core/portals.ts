@@ -19,7 +19,9 @@ import { DEFAULT_FILTERS, cleanFilterList, type ExploreFilters } from "@/lib/exp
  *   title negative → substring reject
  *   location always_allow > block > allow (case-insensitive substring)
  */
-type FilterLists = Pick<ExploreFilters, "positive" | "negative" | "allow" | "block" | "alwaysAllow">;
+type FilterLists = Pick<ExploreFilters, "positive" | "negative" | "allow" | "block" | "alwaysAllow"> & {
+  allowBareRemote?: boolean;
+};
 
 // Uncapped on purpose: these lists come from the user's real portals.yml and are
 // written back out as the ephemeral scanner config. Capping here silently dropped
@@ -42,8 +44,11 @@ export function serializePortals(f: FilterLists): string {
     out += block("positive", f.positive);
     out += block("negative", f.negative);
   }
-  if (f.allow.length || f.block.length || f.alwaysAllow.length) {
+  if (f.allow.length || f.block.length || f.alwaysAllow.length || f.allowBareRemote) {
     out += "location_filter:\n";
+    // Scalar flag, not a keyword list — must be emitted explicitly or the
+    // in-app scan silently enforces a STRICTER policy than `node scan.mjs`.
+    if (f.allowBareRemote) out += "  allow_bare_remote: true\n";
     out += block("always_allow", f.alwaysAllow);
     out += block("allow", f.allow);
     out += block("block", f.block);
@@ -94,6 +99,7 @@ export function seedExploreFilters(): { filters: ExploreFilters; seededFrom: str
     filters.allow = listFrom(lf.allow);
     filters.block = listFrom(lf.block);
     filters.alwaysAllow = listFrom(lf.always_allow);
+    filters.allowBareRemote = lf.allow_bare_remote === true;
     if (filters.positive.length || filters.allow.length || filters.block.length) seededFrom.push("portals.yml");
   }
 
@@ -114,6 +120,42 @@ export function seedExploreFilters(): { filters: ExploreFilters; seededFrom: str
 }
 
 export { listFrom as normalizeKeywords };
+
+/**
+ * The user's curated broad-discovery searches from portals.yml `search_queries`.
+ *
+ * These are the ONLY sources neither zero-token scanner can reach — boards that
+ * are bot-walled, auth-gated, or client-rendered, expressed as `site:` queries.
+ * Before Deep search existed they were read only by agent `scan` mode Level 3,
+ * which in practice never ran, so the coverage was configured but dead.
+ *
+ * Disabled entries are skipped, and so are duplicate queries: the Deep search
+ * route puts every returned query in the prompt and the agent runs the list in
+ * order, so a query repeated across two portals.yml entries is paid for twice
+ * for the same results. First occurrence wins, keeping its name.
+ *
+ * Returns [] on a bare or malformed checkout.
+ */
+export function readSearchQueries(): Array<{ name: string; query: string }> {
+  const portals = loadYaml("portals.yml");
+  const raw = portals?.search_queries;
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ name: string; query: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if (e.enabled === false) continue;
+    const query = typeof e.query === "string" ? e.query.trim() : "";
+    if (!query) continue;
+    const key = query.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const name = typeof e.name === "string" && e.name.trim() ? e.name.trim() : query.slice(0, 60);
+    out.push({ name, query });
+  }
+  return out;
+}
 
 /** What "My portals" actually covers — the enabled job boards (by name) and the
  *  count of enabled tracked companies in the user's portals.yml. Rendered under
