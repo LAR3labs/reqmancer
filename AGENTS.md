@@ -375,23 +375,37 @@ These are two separate axes:
 - **Dependabot** monitors npm, Go modules, and GitHub Actions for security updates
 - **Contributing process**: issue first → discussion → PR with linked issue → CI passes → maintainer review → merge
 
-### GitHub agent attribution
+### GitHub pull requests
 
-Every AI agent that interacts with a pull request must leave one short PR
-comment for its work session. This applies when the agent comments, reviews,
-pushes commits, changes PR metadata, closes, or merges. Use the model that
-actually performed the work and never guess a model name or reasoning level.
+Use a clear, specific PR title that says what changes for the user or system.
+Avoid vague titles such as "updates", "fixes", or "misc cleanup". The PR body
+must explain the problem, the result, and how the change was validated in plain
+language.
 
-```text
-<Model Used: GPT-5 Codex>
-<Model Used: Opus 5>
-<Model Used: GPT-5 Codex | Reasoning: high>
+Every AI agent that interacts with a PR must leave one comment for its work
+session. This applies when the agent reviews, pushes commits, changes PR
+metadata, closes, or merges. Put the model first so it is easy to spot, then
+explain what the agent did and why. Never post a model tag with no context.
+
+```markdown
+## Model used
+
+**GPT-5 Codex**
+
+## What I did
+
+Fixed the stale search state, preserved saved filters, and reran the full test
+suite before pushing.
 ```
 
 Codex agents use their current Codex model name. Claude Code agents use their
-current Claude model name. Include `Reasoning` only when the runtime exposes it.
-One note may cover several actions by the same model in the same work session;
-do not post a separate attribution comment for every API call.
+current Claude model name. Include the reasoning level below the model only when
+the runtime exposes it. Never guess the model or reasoning level. One comment
+may cover several actions by the same model in the same work session.
+
+When an agent merges, the comment must also include a `## Merge summary` section
+that any reader can understand. State what the merge changes, why it matters,
+and the validation result. Keep implementation details secondary.
 
 ## Community and Governance
 
