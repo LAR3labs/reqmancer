@@ -127,6 +127,21 @@ try {
   if (parseAgenticListing(mismatched).length === 0) pass('parseAgenticListing() rejects mismatched href quotes');
   else fail('parseAgenticListing() accepted mismatched href quotes');
 
+  // HTML permits whitespace around `=` and an uppercase tag/attribute.
+  const spaced = `<a  class="c"  HREF = '/jobs/spaced-role'><div>Spaced Role</div><div>Acme</div></a>`;
+  if (parseAgenticListing(spaced).length === 1) pass('parseAgenticListing() accepts whitespace around = and uppercase HREF');
+  else fail(`parseAgenticListing() found ${parseAgenticListing(spaced).length} cards for spaced/uppercase markup (expected 1)`);
+
+  // Overmatching corrupts card boundaries: `data-href` is not an href, and
+  // `<article` is not an anchor. Both previously matched.
+  const overmatch = `<a data-href="/jobs/not-a-link"><div>T</div><div>C</div></a>`;
+  if (parseAgenticListing(overmatch).length === 0) pass('parseAgenticListing() ignores data-href');
+  else fail('parseAgenticListing() treated data-href as a posting anchor');
+
+  const notAnchor = `<article href="/jobs/not-an-anchor"><div>T</div><div>C</div></article>`;
+  if (parseAgenticListing(notAnchor).length === 0) pass('parseAgenticListing() ignores a non-anchor tag starting with "a"');
+  else fail('parseAgenticListing() treated <article> as a posting anchor');
+
 } catch (err) {
   fail(`agentic-jobs provider test threw — ${err.message}`);
 }

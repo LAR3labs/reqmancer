@@ -149,12 +149,17 @@ export function parseAgenticListing(html) {
   // order INSIDE a card is unchanged, so only the boundary detection moved here.
   // Anchoring on the href also makes the parser independent of the utility-class
   // soup around it, which is what broke last time.
-  // Match either quote style: HTML permits href='…' and a template change to
-  // single quotes would silently yield zero cards, which is the exact failure
-  // this parser is being repaired for. The backreference keeps the closing
-  // quote matched to the opening one.
+  // Anchor boundaries matter here in both directions.
+  //   `<a\s`            - so `<article href=…>` is not read as an anchor
+  //   `(?:[^>]*?\s)?`   - other attributes, but href must follow whitespace,
+  //                       so `data-href="/jobs/x"` does not qualify
+  //   `\s*=\s*`         - HTML allows `href = "…"`
+  //   `(["'])…\1`       - either quote style, closing quote must match opening
+  // Case-insensitive because `<A HREF=…>` is valid markup. Getting any of
+  // these wrong yields zero cards, which is the silent failure this parser is
+  // being repaired for.
   const bounds = [
-    ...html.matchAll(/<a[^>]*\bhref=(["'])\/jobs\/([A-Za-z0-9._~-]+)\1/g),
+    ...html.matchAll(/<a\s(?:[^>]*?\s)?href\s*=\s*(["'])\/jobs\/([A-Za-z0-9._~-]+)\1/gi),
   ];
   for (let i = 0; i < bounds.length; i++) {
     const start = bounds[i].index ?? 0;
