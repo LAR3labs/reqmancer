@@ -23,6 +23,22 @@ try {
     fail(`resolveLatestThreadId returned ${resolveLatestThreadId(fakeSearch)}`);
   }
 
+  // resolveLatestThreadId ─ the "wants to be hired" twin listed FIRST.
+  // The whoishiring bot posts both threads in the same second, so Algolia's
+  // date ordering between them is arbitrary — picking the wrong one would fill
+  // the pipeline with job SEEKERS instead of employers.
+  const twinFirst = {
+    hits: [
+      { objectID: '88888888', title: 'Ask HN: Who wants to be hired? (July 2026)' },
+      { objectID: '99999999', title: 'Ask HN: Who is hiring? (July 2026)' },
+    ],
+  };
+  if (resolveLatestThreadId(twinFirst) === '99999999') {
+    pass('resolveLatestThreadId skips the "wants to be hired" twin even when it sorts first');
+  } else {
+    fail(`resolveLatestThreadId picked ${resolveLatestThreadId(twinFirst)} over the hiring thread`);
+  }
+
   // resolveLatestThreadId ─ no matching hit
   const noMatch = { hits: [{ objectID: '11111', title: 'Ask HN: Who wants to be hired?' }] };
   if (resolveLatestThreadId(noMatch) === null) {
