@@ -163,6 +163,20 @@ try {
   const hostile = `<div id="job-card-9"><a href="/job/../../evil" data-id="job-card-title">Evil</a></div>`;
   if (parseBuiltInListing(hostile, 'builtincharlotte.com').length === 0) pass('parseBuiltInListing() drops a card with a traversal-shaped path');
   else fail('parseBuiltInListing() accepted a traversal-shaped path');
+
+  // A shape pattern like /^builtin[a-z]*\.com$/ also matches a domain an
+  // attacker can register, which turns a hostile portals.yml into an SSRF.
+  // The allowlist must reject these by name.
+  let ssrfRejected = 0;
+  for (const host of ['builtinattacker.com', 'builtinevil.com', 'builtin-nyc.com', 'notbuiltin.com']) {
+    try { resolveSite(host); } catch { ssrfRejected++; }
+  }
+  if (ssrfRejected === 4) pass('resolveSite() rejects lookalike builtin* hosts (SSRF)');
+  else fail(`resolveSite() accepted ${4 - ssrfRejected} lookalike host(s)`);
+
+  if (resolveSite('https://www.builtinnyc.com/jobs') === 'builtinnyc.com') pass('resolveSite() strips a www. prefix');
+  else fail('resolveSite() did not strip www.');
+
 } catch (err) {
   fail(`builtin provider test threw — ${err.message}`);
 }

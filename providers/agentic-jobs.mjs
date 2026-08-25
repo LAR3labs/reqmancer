@@ -149,11 +149,17 @@ export function parseAgenticListing(html) {
   // order INSIDE a card is unchanged, so only the boundary detection moved here.
   // Anchoring on the href also makes the parser independent of the utility-class
   // soup around it, which is what broke last time.
-  const bounds = [...html.matchAll(/<a[^>]*\bhref="\/jobs\/([A-Za-z0-9._~-]+)"/g)];
+  // Match either quote style: HTML permits href='…' and a template change to
+  // single quotes would silently yield zero cards, which is the exact failure
+  // this parser is being repaired for. The backreference keeps the closing
+  // quote matched to the opening one.
+  const bounds = [
+    ...html.matchAll(/<a[^>]*\bhref=(["'])\/jobs\/([A-Za-z0-9._~-]+)\1/g),
+  ];
   for (let i = 0; i < bounds.length; i++) {
     const start = bounds[i].index ?? 0;
     const end = i + 1 < bounds.length ? bounds[i + 1].index : html.length;
-    const slug = bounds[i][1];
+    const slug = bounds[i][2];
     const job = normalizeAgenticCard(slug, cardLines(html.slice(start, end)));
     if (job && !seen.has(job.url)) {
       seen.add(job.url);

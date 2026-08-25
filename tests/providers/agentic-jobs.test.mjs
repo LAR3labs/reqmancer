@@ -115,6 +115,18 @@ try {
 
   if (cardLines('<div>A</div><script>var x=1</script><div>B</div>').join('|') === 'A|B') pass('cardLines() strips scripts and empty nodes');
   else fail(`cardLines() → ${cardLines('<div>A</div><script>var x=1</script><div>B</div>').join('|')}`);
+
+  // HTML permits href='…'. Matching only double quotes meant a template change
+  // would silently return zero cards — the same failure this parser fixes.
+  const singleQuoted = `<a href='/jobs/single-quoted-role'><div>Single Quoted Role</div><div>Acme</div></a>`;
+  if (parseAgenticListing(singleQuoted).length === 1) pass('parseAgenticListing() accepts a single-quoted href');
+  else fail(`parseAgenticListing() found ${parseAgenticListing(singleQuoted).length} cards for a single-quoted href (expected 1)`);
+
+  // The closing quote must match the opening one, not just be any quote.
+  const mismatched = `<a href="/jobs/mismatched'><div>T</div><div>C</div></a>`;
+  if (parseAgenticListing(mismatched).length === 0) pass('parseAgenticListing() rejects mismatched href quotes');
+  else fail('parseAgenticListing() accepted mismatched href quotes');
+
 } catch (err) {
   fail(`agentic-jobs provider test threw — ${err.message}`);
 }

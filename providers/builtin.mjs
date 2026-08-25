@@ -37,10 +37,23 @@ const DEFAULT_SITE = 'builtin.com';
 const DEFAULT_PAGES = 1;
 const MAX_PAGES = 5;
 
-// Built In city sites are all builtin*.com (builtinchicago, builtinla, …).
-// Pinning to this shape keeps a hostile portals.yml from pointing the scraper
-// at an arbitrary host.
-const HOST_RE = /^(?:www\.)?builtin[a-z]*\.com$/;
+// Built In runs a fixed set of city sites. An explicit allowlist, not a shape
+// pattern: /^builtin[a-z]*\.com$/ also matches builtinattacker.com, so anyone
+// who registers a builtin-prefixed domain gets a fetch() from this machine
+// (SSRF via a hostile portals.yml). Add new cities here as they launch.
+const ALLOWED_HOSTS = new Set([
+  'builtin.com',
+  'builtinatlanta.com',
+  'builtinaustin.com',
+  'builtinboston.com',
+  'builtinchicago.com',
+  'builtincharlotte.com',
+  'builtincolorado.com',
+  'builtinla.com',
+  'builtinnyc.com',
+  'builtinsf.com',
+  'builtinseattle.com',
+]);
 
 /**
  * Validate a configured site and return its bare hostname.
@@ -50,9 +63,17 @@ const HOST_RE = /^(?:www\.)?builtin[a-z]*\.com$/;
 export function resolveSite(raw) {
   const value = typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_SITE;
   // Accept "builtincharlotte.com" or "https://builtincharlotte.com".
-  const host = value.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
-  if (!HOST_RE.test(host)) {
-    throw new Error(`builtin: untrusted site "${value}" — must be a builtin*.com host`);
+  // Strip scheme, path, and a leading www. so "https://www.builtinnyc.com/jobs"
+  // and "builtinnyc.com" both resolve to the same allowlisted host.
+  const host = value
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/^www\./i, '')
+    .toLowerCase();
+  if (!ALLOWED_HOSTS.has(host)) {
+    throw new Error(
+      `builtin: untrusted site "${value}" — must be one of: ${[...ALLOWED_HOSTS].join(', ')}`,
+    );
   }
   return host;
 }
@@ -194,13 +215,12 @@ export function composeLocation(workplace, rawLocation) {
 
 /**
  * Normalize one card. Exported for tests.
- * @param {string} id
  * @param {string} segment
  * @param {string} host
  * @param {number} [now]
  * @returns {{title: string, url: string, company: string, location: string, description?: string, postedAt?: number, salary?: {min: number, max: number, currency: string}} | null}
  */
-export function normalizeBuiltInCard(id, segment, host, now = Date.now()) {
+export function normalizeBuiltInCard(segment, host, now = Date.now()) {
   const hrefMatch = /href="(\/job\/[^"]+)"/.exec(segment);
   if (!hrefMatch) return null;
   const path = hrefMatch[1];
@@ -252,6 +272,10 @@ export function normalizeBuiltInCard(id, segment, host, now = Date.now()) {
   return job;
 }
 
+// Card container boundary, shared by the parser and the fetch-time sanity check.
+// Only used via `matchAll`/`match`, both of which leave `lastIndex` alone.
+const CARD_BOUNDARY_RE = /<div[^>]*\bid="job-card-\d+"/g;
+
 /**
  * Parse a Built In list page. Exported for tests.
  * @param {string} html
@@ -264,13 +288,12 @@ export function parseBuiltInListing(html, host, now = Date.now()) {
   const seen = new Set();
   // Match the FULL id="job-card-{digits}" pattern — see the header note about
   // data-id="job-card-title" false boundaries.
-  const bounds = [...html.matchAll(/<div[^>]*\bid="job-card-\d+"/g)];
+  const bounds = [...html.matchAll(CARD_BOUNDARY_RE)];
   for (let i = 0; i < bounds.length; i++) {
     const start = bounds[i].index ?? 0;
     const end = i + 1 < bounds.length ? bounds[i + 1].index : html.length;
     const segment = html.slice(start, end);
-    const id = /id="job-card-(\d+)"/.exec(bounds[i][0])?.[1] ?? '';
-    const job = normalizeBuiltInCard(id, segment, host, now);
+    const job = normalizeBuiltInCard(segment, host, now);
     if (job && !seen.has(job.url)) {
       seen.add(job.url);
       out.push(job);
@@ -291,7 +314,10 @@ export default {
   async fetch(entry, ctx) {
     const { host, queries, pages } = resolveConfig(entry);
     const byUrl = new Map();
-    let fetched = 0;
+    // Tracks whether any fetched page contained card CONTAINERS. A search with
+    // no matches renders a real page with zero containers — that is an honest
+    // empty result, not a parser failure.
+    let sawCardMarkup = false;
 
     // No configured queries → walk the unfiltered list; scan.mjs's title filter
     // gates the results, same as the other whole-board feeds.
@@ -301,7 +327,9 @@ export default {
         // redirect:'error' prevents SSRF via server-side redirects; combined
         // with resolveSite it keeps every request pinned to a builtin*.com host.
         const html = await ctx.fetchText(url, { redirect: 'error' });
-        fetched++;
+        // `String#match` with a global regex resets lastIndex itself; `.test`
+        // would advance the shared literal's cursor across pages.
+        if (typeof html === 'string' && html.match(CARD_BOUNDARY_RE)) sawCardMarkup = true;
         const jobs = parseBuiltInListing(html, host);
         for (const job of jobs) {
           if (!byUrl.has(job.url)) byUrl.set(job.url, job);
@@ -311,9 +339,11 @@ export default {
       }
     }
 
-    if (fetched > 0 && byUrl.size === 0) {
+    // Only a page that HAS card containers but yields no usable job is evidence
+    // the card grammar moved. Zero containers means the query found nothing.
+    if (sawCardMarkup && byUrl.size === 0) {
       throw new Error(
-        `builtin: parsed 0 job cards from ${host} — the site markup likely changed (expected <div id="job-card-{id}"> containers)`,
+        `builtin: found job-card containers on ${host} but parsed 0 usable jobs — the card markup likely changed`,
       );
     }
     return [...byUrl.values()];
