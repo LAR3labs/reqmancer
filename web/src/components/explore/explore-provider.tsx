@@ -478,13 +478,45 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
 
     const acc: DiscoveredOffer[] = [];
     let sawError = "";
+    // Liveness gate. AI candidates come from a web index that lags reality, so a
+    // posting can already be 404 by the time it streams in. Confirm each one
+    // against its own ATS API (free, no browser) BEFORE it becomes a card —
+    // holding it back rather than letting it appear and then vanish. Non-ATS and
+    // inconclusive URLs pass through unchanged and keep their "unconfirmed" badge.
+    let deadRejects = 0;
+    const pending: Promise<void>[] = [];
+    const admit = (offer: DiscoveredOffer) => {
+      acc.push(offer);
+      setOffers((o) => [...o, offer]);
+      setMatchCount(acc.length);
+      setAiCost((c) => ({ ...c, candidates: acc.length }));
+    };
+    const gate = (offer: DiscoveredOffer) => {
+      pending.push(
+        (async () => {
+          try {
+            const r = await fetch("/api/explore/liveness", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ urls: [offer.url] }),
+            });
+            const d = (await r.json()) as { results?: { state?: string }[] };
+            // Only a DEFINITIVE "expired" drops a candidate; anything else shows.
+            if (d.results?.[0]?.state === "expired") {
+              deadRejects++;
+              return;
+            }
+          } catch {
+            /* checker unreachable → show it, same as before this gate existed */
+          }
+          admit(offer);
+        })(),
+      );
+    };
     const handle = (chunks: AiTraceChunk[]) => {
       for (const ch of chunks) {
         if (ch.kind === "offer") {
-          acc.push(ch.offer);
-          setOffers((o) => [...o, ch.offer]);
-          setMatchCount(acc.length);
-          setAiCost((c) => ({ ...c, candidates: acc.length }));
+          gate(ch.offer);
           setPhase("hunting");
         } else {
           setAiTrace((t) => [...t, ch]);
@@ -529,10 +561,16 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     }
 
     runningRef.current = false;
+    // The stream is done, but in-flight liveness checks are not. Settle them
+    // before reading acc/deadRejects, or the summary undercounts the candidates
+    // still being confirmed.
+    await Promise.all(pending);
     // A hunt that found plenty but filtered most of it out must SAY so — otherwise
     // "2 candidates" reads as a weak search rather than a working location policy.
     const dropped = parser.locationRejects();
-    const droppedNote = dropped > 0 ? ` ${dropped} outside your location filter.` : "";
+    const droppedNote =
+      (dropped > 0 ? ` ${dropped} outside your location filter.` : "") +
+      (deadRejects > 0 ? ` ${deadRejects} no longer live.` : "");
     if (acc.length > 0) {
       setMatchCount(acc.length);
       setPhase("revealing");
@@ -542,7 +580,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       setError(sawError);
       setPhase("failed");
     } else {
-      setStatus(dropped > 0 ? `No candidates in range.${droppedNote}` : "");
+      setStatus(dropped > 0 || deadRejects > 0 ? `No candidates in range.${droppedNote}` : "");
       setPhase("empty-loose");
     }
   }, []);
