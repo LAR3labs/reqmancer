@@ -264,7 +264,9 @@ export function paramsToFilters(sp: URLSearchParams, base: ExploreFilters = DEFA
       blockHard: split(sp.get("hardno")),
       alwaysAllow: split(sp.get("home")),
       since: sp.get("since") ?? undefined,
-      ats: split(sp.get("ats")),
+      // `ats=` (present but empty) is the explicit portals-only choice written
+      // by filtersToParams; it must come back as [], not "absent" (all sources).
+      ats: sp.has("ats") ? (sp.get("ats") ? split(sp.get("ats")) : []) : undefined,
       limit: sp.get("limit") ?? undefined,
       includePortals: sp.get("portals") ?? undefined,
       allowBareRemote: sp.get("bare") ?? undefined,

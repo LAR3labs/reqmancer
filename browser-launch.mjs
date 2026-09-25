@@ -37,12 +37,17 @@
  *      trips a WAF, not fingerprint.
  */
 
-import { chromium } from 'playwright';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
-/** Repo root, derived from this module rather than the caller's cwd. */
-const MODULE_ROOT = path.dirname(fileURLToPath(import.meta.url));
+// Playwright loads lazily, inside each launcher. A static import would make
+// every importer fail when Playwright is missing, including browser-free paths
+// such as browser-extract.mjs's ATS API route and its no_playwright guard.
+async function loadChromium() {
+  const { chromium } = await import('playwright');
+  return chromium;
+}
+
 
 /** Chrome launch flags. Deliberately minimal — each one earns its place. */
 export const STEALTH_ARGS = [
@@ -76,7 +81,9 @@ const IS_WIN = process.platform === 'win32';
  * persistent path is opt-in per call site rather than the global default.
  * Deleting the directory is always safe — it rebuilds on next use.
  */
-export const DEFAULT_PROFILE_DIR = path.join(MODULE_ROOT, '.career-ops-web', 'browser-profile');
+// Resolved from the DATA root, not the code root: the profile is user state
+// (cookies, WAF clearance) and must not live inside the shipped code tree.
+export const DEFAULT_PROFILE_DIR = path.join(getCareerOpsRoot(), '.career-ops-web', 'browser-profile');
 
 /** Platform token for the UA string, matching the host OS. */
 function uaPlatform() {
@@ -176,6 +183,7 @@ let cachedChromeVersion = '';
  *  uses its pinned major). */
 async function probeChromeVersion() {
   if (cachedChromeVersion) return cachedChromeVersion;
+  const chromium = await loadChromium();
   for (const opts of [{ channel: 'chrome', headless: true }, { headless: true }]) {
     let probe;
     try {
@@ -193,6 +201,7 @@ async function probeChromeVersion() {
 
 export async function launchStealthBrowser({ headed = false, args = [] } = {}) {
   const launchArgs = [...STEALTH_ARGS, ...args];
+  const chromium = await loadChromium();
   // With channel:'chrome', headless:true runs Chrome's NEW headless mode (a real
   // Chrome build), not the bundled headless-shell. Playwright has no
   // headless:'new' option — that is Puppeteer's spelling of the same idea.
@@ -230,6 +239,7 @@ export async function launchPersistentStealthContext({
     userAgent: buildUserAgent(await probeChromeVersion()),
     ...STEALTH_CONTEXT_DEFAULTS,
   };
+  const chromium = await loadChromium();
   let context;
   let channel = /** @type {'chrome'|'chromium'} */ ('chrome');
   try {

@@ -74,9 +74,11 @@ background_rebuild() {
 }
 
 if [ -f "$PROD_DIST/BUILD_ID" ] && [ "$(cat "$STAMP_FILE" 2>/dev/null)" = "$STAMP" ]; then
-  exec env BUILD_DIST="$PROD_DIST" ./node_modules/.bin/next start
+  # Loopback only: the app is single-user, and the request guard checks headers
+  # a LAN client could forge.
+  exec env BUILD_DIST="$PROD_DIST" ./node_modules/.bin/next start -H 127.0.0.1
 fi
 
 # No fresh production bundle: serve dev now, build for next time.
 background_rebuild
-exec ./node_modules/.bin/next dev
+exec ./node_modules/.bin/next dev -H 127.0.0.1

@@ -168,7 +168,6 @@ const SYSTEM_PATHS = [
   'modes/auto-pipeline.md',
   'modes/contacto.md',
   'modes/deep.md',
-  'modes/discover.md',
   'modes/ofertas.md',
   'modes/pipeline.md',
   'modes/triage.md',

@@ -52,5 +52,7 @@ export async function GET() {
   // stay visible until the web graduates to 1.0.
   const channel = m ? m[1].toLowerCase() : web && /^0\./.test(web) ? "alpha" : "stable";
   const version = web ? `web ${web}` : coreVersion;
-  return Response.json({ version, coreVersion, channel, sha: shortSha() });
+  // `app` lets the desktop wrapper tell this server apart from any other local
+  // service that happens to answer /api/version on the same port.
+  return Response.json({ app: "career-ops", version, coreVersion, channel, sha: shortSha() });
 }

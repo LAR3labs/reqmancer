@@ -49,14 +49,13 @@ const MAX_FILTER_LIST = 128;
  *
  * Why the bound is here and not a cleanChips() call at the untrusted edge:
  * /api/explore parses the UI's filters with merge=false, so `incoming` REPLACES
- * the base rather than being added to it. Capping incoming at 16 there would
- * re-truncate the user's own policy on the main request path — the exact bug
- * this all fixes. A high bound protects every caller without that regression.
+ * the base rather than being added to it. Any tight cap there would re-truncate
+ * the user's own policy on the main request path — the exact bug this all
+ * fixes. A bound sized to never truncate a real list protects every caller
+ * without that regression.
  */
 // Shared loop. `limit` is enforced INSIDE it so each caller's bound is a real
-// early exit — cleaning to 128 and slicing to 16 afterwards would make the
-// tighter chip cap do 8x the work it asks for on exactly the untrusted input
-// it exists to bound.
+// early exit rather than a slice after the whole input has been cleaned.
 function cleanList(v, limit) {
   if (v == null) return [];
   const arr = Array.isArray(v) ? v : [v];
@@ -80,9 +79,9 @@ export function cleanFilterList(v) {
   return cleanList(v, MAX_FILTER_LIST);
 }
 
-/** cleanList at a hard 16. For UNTRUSTED/ad-hoc chip input (the assistant's
- *  patch path, URL params) where an unbounded list is a DoS-ish footgun. Never
- *  use this on portals.yml-derived policy lists — see cleanFilterList. */
+/** cleanList bounded at CHIP_CAP (512). For UNTRUSTED/ad-hoc chip input (the
+ *  assistant's patch path, URL params), where an unbounded list is a DoS-ish
+ *  footgun. portals.yml-derived policy lists go through cleanFilterList. */
 export function cleanChips(v) {
   return cleanList(v, CHIP_CAP);
 }

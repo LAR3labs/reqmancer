@@ -70,7 +70,7 @@ export async function streamCliPrompt({ prompt, cliId }: { prompt: string; cliId
       return {
         kind: "error",
         status: 400,
-        body: { code: "CODEX_TEMP_DIR_FAILED", error: "AI search could not create an isolated Codex workspace." },
+        body: { code: "CODEX_TEMP_DIR_FAILED", error: "Could not create an isolated Codex workspace for this search." },
       };
     }
   } else {

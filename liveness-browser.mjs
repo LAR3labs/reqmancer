@@ -545,7 +545,10 @@ export function createHeadedPageProvider(chromium, { persist = true } = {}) {
           return page;
         } catch {
           // Profile locked by a concurrent run, or unwritable — degrade to an
-          // ephemeral session instead of giving up the retry entirely.
+          // ephemeral session instead of giving up the retry entirely. If the
+          // context opened but newPage() failed, close it first so its headed
+          // Chrome doesn't outlive the run holding the profile lock.
+          if (context) await context.close().catch(() => {});
           context = null;
         }
       }
@@ -554,6 +557,7 @@ export function createHeadedPageProvider(chromium, { persist = true } = {}) {
         page = await newStealthPage(browser);
         return page;
       } catch {
+        if (browser) await browser.close().catch(() => {});
         launchFailed = true;
         browser = null;
         page = null;

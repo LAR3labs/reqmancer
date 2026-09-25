@@ -396,8 +396,10 @@ Required, always ask for whatever is missing (do not invent any of these):
    same-day availability (intake item 3) when the missed slot was today.
 2. **The interviewer or recruiter's name**, exactly as given by the user —
    do not scrape or guess it from a report.
-3. **Remaining same-day availability** the user wants to offer (a window,
-   e.g. "before 4pm today" or "any time after 2:30").
+3. **Availability** the user wants to offer. If the missed slot was today,
+   ask for remaining same-day availability (e.g. "before 4pm today" or "any
+   time after 2:30"). If it was a previous day, ask for their next available
+   times instead.
 4. Company and role, for the subject line (from the linked report if one was
    given, otherwise ask).
 
@@ -407,7 +409,8 @@ Required, always ask for whatever is missing (do not invent any of these):
 2. One plain sentence stating the confirmed time and that the call did not
    happen. State it as a fact, not an accusation — no "I was very
    disappointed" or over-apologizing for pointing it out.
-3. One sentence offering the remaining same-day availability the user gave.
+3. One sentence offering the availability the user gave: same-day if the
+   missed slot was today, otherwise their next available times.
 4. One-line reaffirmation of interest — brief, not a resell of fit points
    (Step 3 is skipped for this variant).
 5. Signature.
@@ -423,7 +426,7 @@ framing (same banned-phrase rule as `modes/followup.md`).
   ("I waited...", "I understand things come up, but..."), no guilt framing,
   no exclamation points.
 - Never fabricate the confirmed time, the interviewer's name, or the
-  availability window — all three are user-provided inputs, never inferred
+  availability — all three are user-provided inputs, never inferred
   or scraped from a report.
 - Never speculate about why the call was missed (traffic, forgot, double
   booked). State the fact and move to the ask.
@@ -437,7 +440,8 @@ framing (same banned-phrase rule as `modes/followup.md`).
 ### Example (generic)
 
 All values are placeholders. Fill them only with details the user actually
-provides.
+provides. This example is for a slot missed earlier today; for a previous-day
+no-show, drop "today" and offer the user's next available times.
 
 ```text
 Subject: {Role} — following up on our {time} call

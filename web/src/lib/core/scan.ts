@@ -146,19 +146,38 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
     const seen = new Set<string>();
     let jsonOut = "";
     let errBuf = "";
+    // scan.mjs has no SIGTERM handler in --portal-scan-json mode, so a timed-out
+    // run exits without its JSON. Remember that we stopped it, so the close
+    // handler reports a timeout instead of "no readable output", and force-kill
+    // a child that ignores SIGTERM so it can't hold the stream open.
+    const PORTAL_SCAN_TIMEOUT_MS = 230_000;
+    let timedOut = false;
+    let hardKiller: ReturnType<typeof setTimeout> | undefined;
     const killer = setTimeout(() => {
+      timedOut = true;
       try {
         child.kill("SIGTERM");
       } catch {
         /* ignore */
       }
-    }, 230_000);
+      hardKiller = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* ignore */
+        }
+      }, 5_000);
+    }, PORTAL_SCAN_TIMEOUT_MS);
 
-    child.stdout.on("data", (d: Buffer) => {
-      jsonOut += d.toString();
+    // Decode as a stream: toString() per chunk splits multibyte characters
+    // ("Nestlé") that straddle a pipe-chunk boundary into U+FFFD.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (d: string) => {
+      jsonOut += d;
     });
-    child.stderr.on("data", (d: Buffer) => {
-      errBuf += d.toString();
+    child.stderr.on("data", (d: string) => {
+      errBuf += d;
       const parts = errBuf.split(/\r?\n/);
       errBuf = parts.pop() ?? "";
       for (const p of parts) if (p.trim()) onEvent({ kind: "log", line: p.trim() });
@@ -166,11 +185,13 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
 
     child.on("error", (e) => {
       clearTimeout(killer);
+      if (hardKiller) clearTimeout(hardKiller);
       onEvent({ kind: "error", message: e instanceof Error ? e.message : "portal scanner failed to start" });
       resolve(offers);
     });
     child.on("close", () => {
       clearTimeout(killer);
+      if (hardKiller) clearTimeout(hardKiller);
       // --portal-scan-json keeps stdout to one portal-scan/v1 object. Match it
       // by schema per line anyway, so a stray line can't hide the result.
       let j: PortalScanJson | null = null;
@@ -215,7 +236,12 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
           });
         }
       } else {
-        onEvent({ kind: "error", message: "The portal scanner returned no readable output." });
+        onEvent({
+          kind: "error",
+          message: timedOut
+            ? `The portal scan was stopped after ${PORTAL_SCAN_TIMEOUT_MS / 1000}s before it finished.`
+            : "The portal scanner returned no readable output.",
+        });
       }
       resolve(offers);
     });

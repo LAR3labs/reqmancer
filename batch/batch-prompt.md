@@ -313,7 +313,7 @@ Use one tier: **High Confidence**, **Proceed with Caution**, or **Suspicious**. 
 
 Close the report body with a `## Risk Summary` block directly after Block G's section — one row per risk signal, fixed order, three states per row: `✅ {clear verdict}` / `⚠️ {finding}` / `— not evaluated`. **Aggregation only, zero new judgment:** each row quotes the verdict already produced by its source signal; it never re-scores or overrides.
 
-**`— not evaluated` is a first-class state:** a signal that this worker cannot evaluate is explicitly declared — NEVER omit the row — so an all-✅ summary can be trusted. **Named exception:** the Interview red flags row renders its not-evaluated case as `— no interview sessions yet` — a documented, more specific phrasing of the same "not evaluated" concept for that one row (the cross-reference check did run; it just found no redflags file), not a fourth free-floating state.
+**`— not evaluated` is a first-class state:** a signal that this worker cannot evaluate is explicitly declared — NEVER omit the row — so an all-✅ summary can be trusted. The Interview red flags row uses the same `— not evaluated` when no red-flags file exists; file absence is not evidence about interview sessions.
 
 Batch rendering rules per row:
 
@@ -335,7 +335,7 @@ Block format:
 | Posting legitimacy | ✅ High Confidence |
 | Employment classification | — not evaluated |
 | Culture screen | — not evaluated |
-| Interview red flags | — no interview sessions yet |
+| Interview red flags | — not evaluated |
 | AI claims vs. infrastructure | — not evaluated |
 ```
 
@@ -425,7 +425,7 @@ Rules:
 - Do not invent missing data. If confidence is limited, set `confidence: "Low"` and explain the limitation in the human-readable sections.
 - `work_auth` reflects the Block A work-authorization tier: `no_sponsorship` only when the JD **explicitly** refuses sponsorship for a role outside the candidate's `authorized_in`; `unstated` when the JD is silent (neutral, not a blocker); `not_needed` when the role is within `authorized_in` or sponsorship isn't required; `sponsors` when the JD explicitly offers it.
 - `requirement_importance` mirrors Block B's table row by row — same rows, same verdicts, snake_cased. `evidence: stated` **requires** a non-null verbatim `jd_signal`; `jd_signal: null` is legal only for `structural` and `inferred`. `importance` is never `critical` or `high` when `evidence: inferred` — that is Block B's gate, machine-checkable here. `match` is `strong | partial | missing | na`, mirroring ✅ / ⚠️ / ❌ / ➖. Use `[]` when the JD yields no usable requirement list. No consumer reads this key yet; it is allowlisted so it round-trips.
-- `risk_summary` mirrors the `## Risk Summary` block row by row — same source verdicts, snake_cased: `legitimacy` from the Block G tier (`high_confidence` / `proceed_with_caution` / `suspicious`), `classification` from the Employment-classification row (`clear` / `flagged` — batch renders it `— not evaluated`, so `not_evaluated`), `culture` from the Block A Culture screen (`pass` / `caution` / `fail`), `interview_redflags` from the red-flag file's warning level (`none` / `caution` / `warning`), `ai_infra` from the AI-claims-vs-infrastructure row (`consistent` / `mismatch`), `ai_screening_disclosure` from the Block G AI-screening disclosure signal (`disclosed` when the posting names AI/automated screening, `corroborating_only` when the jurisdiction requires disclosure and the posting is silent, `no_match` when the candidate's jurisdiction has no table row). Every key in the schema gets exactly one of its listed values: any row rendered `— not evaluated` (or `— no interview sessions yet`) is `not_evaluated` here. Never invent a value the block does not show, and never omit a key.
+- `risk_summary` mirrors the `## Risk Summary` block row by row — same source verdicts, snake_cased: `legitimacy` from the Block G tier (`high_confidence` / `proceed_with_caution` / `suspicious`), `classification` from the Employment-classification row (`clear` / `flagged` — batch renders it `— not evaluated`, so `not_evaluated`), `culture` from the Block A Culture screen (`pass` / `caution` / `fail`), `interview_redflags` from the red-flag file's warning level (`none` / `caution` / `warning`), `ai_infra` from the AI-claims-vs-infrastructure row (`consistent` / `mismatch`), `ai_screening_disclosure` from the Block G AI-screening disclosure signal (`disclosed` when the posting names AI/automated screening, `corroborating_only` when the jurisdiction requires disclosure and the posting is silent, `no_match` when the candidate's jurisdiction has no table row). Every key in the schema gets exactly one of its listed values: any row rendered `— not evaluated` is `not_evaluated` here. Never invent a value the block does not show, and never omit a key.
 
 ### Step 3 — Save the Report
 
