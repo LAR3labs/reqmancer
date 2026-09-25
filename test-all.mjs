@@ -4265,7 +4265,10 @@ if (!existsSync(openrouterRunnerPath)) {
   const openrouterRunner = readFile('openrouter-runner.mjs');
   if (
     openrouterRunner.includes('// Job page content fetcher (Playwright-first, plain fetch fallback)') &&
-    openrouterRunner.includes('browser = await chromium.launch({ headless: true })') &&
+    // Local fork: the launch goes through the shared stealth launcher
+    // (browser-launch.mjs); either form is still a browser-first launch.
+    (openrouterRunner.includes('browser = await chromium.launch({ headless: true })') ||
+      openrouterRunner.includes('({ browser } = await launchStealthBrowser())')) &&
     openrouterRunner.includes('falling back to plain fetch.') &&
     openrouterRunner.includes('if (browser) await browser.close().catch(() => {})')
   ) {

@@ -2,11 +2,11 @@
 // Imports directly from format-salary.mjs (the single source of truth) so the
 // test and production code can never drift out of sync.
 //
-// Run:  node --test test-salary-format.mjs
+// Run:  npm test
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatSalary } from "./src/lib/format-salary.mjs";
+import { formatSalary } from "../../src/lib/format-salary.mjs";
 
 test("undefined → null (caller shows N/A)", () => {
   assert.equal(formatSalary(undefined), null);

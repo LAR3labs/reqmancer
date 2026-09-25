@@ -36,6 +36,33 @@ The silence after you hit send is not about you. Enough people saw the same thin
   <img src="docs/demo.gif" alt="Career-Ops Demo" width="800">
 </p>
 
+## Sponsors
+
+career-ops is free for candidates, forever. The companies below fund the maintainer's time and keep it that way.
+
+<p align="center">
+  <a href="https://serpapi.com/career-ops-org" title="SerpApi"><img src="docs/sponsors/serpapi.svg" alt="SerpApi" height="48"></a>
+</p>
+
+<p align="center"><strong>SerpApi</strong> · Build a portfolio project with live search data. SerpApi gives developers structured JSON/Markdown from Google Search, Maps, Shopping, and other engines through a simple API call.</p>
+
+> Sponsorship buys clearly labeled visibility, never influence: no amount of money changes the roadmap or places anything in the product. Sponsors never appear in evaluations, rankings or recommendations.
+
+## What career-ops does for you
+
+Paste a job. It tells you whether that night is worth it.
+
+- **Fake or stale?** It flags ghost jobs and scams before you write a word.
+- **Not you?** It scores the role against your real CV and tells you to skip a weak fit. You can override it.
+- **Worth it?** It drafts the CV, the cover letter and the answers. You read them. You send them.
+- **Who do I talk to?** It finds the person and drafts the note. It never sends it.
+- **Where does it all go?** Every application stays on your machine. Nothing is uploaded to us.
+- **What should I learn?** After a run of noes, it names the gap.
+
+The first runs are rough. It does not know you yet. Talk to it: your CV, what you want, what you refuse. Think of it as a recruiter's first week.
+
+On first launch it asks for all that in chat. Nothing to configure by hand.
+
 ## What this fork changes
 
 Everything here is built on santifer's work. My changes sit on top of it:

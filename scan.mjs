@@ -30,7 +30,7 @@
  *   node scan.mjs --verify --throttle=8000     # custom base gap in ms (waits base..2*base)
  *   node scan.mjs --include-blacklisted        # let data/blacklist.md matches through (annotated)
  *   node scan.mjs --since 7                    # postings from the last 7 days
- *   node scan.mjs --dry-run --json             # stdout = ONE portal-scan/v1 JSON object (plus the receipt line); human progress → stderr
+ *   node scan.mjs --dry-run --portal-scan-json # stdout = ONE portal-scan/v1 JSON object (web Discover); human progress → stderr
  *   node scan.mjs --posted-after 2026-07-01    # absolute lower bound on posting date
  *   node scan.mjs --posted-before 2026-08-01   # absolute upper bound on posting date
  *   node scan.mjs --rediscover-404             # re-verify tracked URLs that 404/410 (rides on --verify)
@@ -3127,7 +3127,7 @@ function guardStatusFor(code) {
 const KNOWN_FLAGS = [
   '--dry-run', '--verify', '--headed-fallback', '--throttle', '--rediscover-404',
   '--include-blacklisted', '--company', '--posted-after', '--posted-before',
-  '--since', '--quiet', '--json', '--help', '-h',
+  '--since', '--quiet', '--json', '--portal-scan-json', '--help', '-h',
 ];
 
 // Flags whose space-separated value is the NEXT argv token (the `--flag=value`
@@ -3150,6 +3150,7 @@ const USAGE = `Usage:
   node scan.mjs --posted-after 2026-07-01    # absolute lower bound on posting date
   node scan.mjs --posted-before 2026-08-01   # absolute upper bound on posting date
   node scan.mjs --json                       # emit one machine-readable receipt on stdout
+  node scan.mjs --portal-scan-json           # emit one portal-scan/v1 object on stdout (web Discover)
   node scan.mjs --quiet                      # suppress the manifesto footer
   node scan.mjs --help                       # print this usage block and exit`;
 
@@ -3157,7 +3158,11 @@ async function main() {
   const args = process.argv.slice(2);
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS });
   const dryRun = args.includes('--dry-run');
-  const jsonMode = args.includes('--json');
+  // --portal-scan-json is the web Discover contract (portal-scan/v1, see
+  // web/src/lib/core/scan.ts). It replaces the --json receipt rather than
+  // joining it, so each mode keeps exactly one JSON object on stdout.
+  const portalScanJson = args.includes('--portal-scan-json');
+  const jsonMode = args.includes('--json') || portalScanJson;
   if (jsonMode) console.log = console.error.bind(console);
   const verify = args.includes('--verify');
   // Opt-in: on an anti-bot challenge (e.g. pracuj.pl Cloudflare wall), retry the
@@ -3924,7 +3929,7 @@ async function main() {
   console.log(`\n→ Run /career-ops pipeline to evaluate new offers.`);
   console.log('→ Share results and get help: https://discord.gg/8pRpHETxa4');
 
-  if (jsonMode) {
+  if (jsonMode && !portalScanJson) {
     const filtered = totalFilteredTitle + totalFilteredTier + totalFilteredLocation
       + totalFilteredPostingAge + totalFilteredPostedDate + totalFilteredSalary
       + totalFilteredContent + totalFilteredCountryEligibility + totalFilteredBlacklist
@@ -3965,10 +3970,10 @@ async function main() {
     try { writeFileSync('.manifesto-noted', new Date().toISOString() + '\n'); } catch { /* best-effort */ }
   }
 
-  // --json contract (schema portal-scan/v1): ONE authoritative object on stdout,
-  // emitted last so every human line above (redirected to stderr) is already out.
-  // Shape mirrors the web ACL's PortalScanJson (web/src/lib/core/scan.ts).
-  if (jsonMode) {
+  // --portal-scan-json contract (schema portal-scan/v1): ONE authoritative object
+  // on stdout, emitted last so every human line above (redirected to stderr) is
+  // already out. Shape mirrors the web ACL's PortalScanJson (web/src/lib/core/scan.ts).
+  if (portalScanJson) {
     process.stdout.write(JSON.stringify({
       schema: 'portal-scan/v1',
       companiesScanned: summaryCompanies,

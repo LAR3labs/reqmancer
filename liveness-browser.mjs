@@ -510,10 +510,23 @@ export function createHeadedPageProvider(chromium, { persist = true } = {}) {
       }
       if (page) return page;
       if (launchFailed) return null;
+      // A stand-in without launchPersistentContext is a test double, not
+      // Playwright: launch it directly so tests never start a real headed Chrome.
+      if (chromium && typeof chromium.launchPersistentContext !== 'function') {
+        try {
+          browser = await chromium.launch();
+          page = await (await browser.newContext(LIVENESS_CONTEXT_OPTIONS)).newPage();
+          return page;
+        } catch {
+          launchFailed = true;
+          browser = null;
+          page = null;
+          return null;
+        }
+      }
       // Headed + real Chrome + a warm profile is the strongest configuration
-      // available, which is exactly what this fallback is for. `chromium` is
-      // passed in by the caller, but the shared launcher owns the channel/args
-      // choice, so it is ignored here.
+      // available, which is exactly what this fallback is for. The shared
+      // launcher owns the channel/args choice for real Playwright.
       if (persist) {
         try {
           ({ context } = await launchPersistentStealthContext({ headed: true }));

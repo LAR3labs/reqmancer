@@ -87,7 +87,7 @@ type ScanJson = {
 // ── Portal scan (scan.mjs + the user's own portals.yml) ─────────────────────
 //
 // Same ACL discipline as runDiscovery: the REAL core scanner does the work, we
-// only spawn + parse. `--dry-run --json` (schema portal-scan/v1) writes NOTHING
+// only spawn + parse. `--dry-run --portal-scan-json` (schema portal-scan/v1) writes NOTHING
 // and reserves stdout for one authoritative result object (human progress →
 // stderr, surfaced as log events). Filters come from the user's portals.yml —
 // this is deliberately "my portals, as configured", not the UI chips.
@@ -95,7 +95,7 @@ type ScanJson = {
 export function portalScannerSupportsJson(): boolean {
   try {
     const src = fs.readFileSync(rootScript("scan"), "utf8");
-    return src.includes("portal-scan/v1");
+    return src.includes("portal-scan/v1") && src.includes("--portal-scan-json");
   } catch {
     return false;
   }
@@ -121,7 +121,7 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
       }
     };
     if (!portalScannerSupportsJson()) {
-      onEvent({ kind: "log", line: "Portal scan skipped — this checkout's scan.mjs has no --json support." });
+      onEvent({ kind: "log", line: "Portal scan skipped — this checkout's scan.mjs has no --portal-scan-json support." });
       emitEmptySummaryIfPortalsOnly();
       resolve([]);
       return;
@@ -137,7 +137,7 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
     // --since mirrors runDiscovery: the Explore "posted within" window governs
     // both engines. Best-effort on this side — postings whose provider reports
     // no date still pass (scan.mjs buildPostingAgeFilter semantics).
-    const child = spawn(process.execPath, [rootScript("scan"), "--dry-run", "--json", "--since", String(Math.max(1, filters.sinceDays || 7))], {
+    const child = spawn(process.execPath, [rootScript("scan"), "--dry-run", "--portal-scan-json", "--since", String(Math.max(1, filters.sinceDays || 7))], {
       cwd: careerOpsRoot(),
       env: { ...process.env },
     });
@@ -171,9 +171,8 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
     });
     child.on("close", () => {
       clearTimeout(killer);
-      // stdout carries one JSON object per line: upstream's
-      // careerops.scan.receipt@1 plus our portal-scan/v1. Pick ours by schema
-      // rather than parsing the whole buffer as a single object.
+      // --portal-scan-json keeps stdout to one portal-scan/v1 object. Match it
+      // by schema per line anyway, so a stray line can't hide the result.
       let j: PortalScanJson | null = null;
       for (const line of jsonOut.split(/\r?\n/)) {
         if (!line.trim()) continue;

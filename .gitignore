@@ -210,6 +210,10 @@ plan/
 
 # Web — runtime cache/history the dashboard writes locally; nothing here is tracked.
 .career-ops-web/
+# Persistent Chrome profile used by the stealth launcher (browser-launch.mjs).
+# Already covered by the line above; listed explicitly because it holds COOKIES
+# for every site the scanner visits and must never be committed.
+.career-ops-web/browser-profile/
 
 # Upgrade-test fixtures are fictional system-layer data, never user data
 # (see DATA_CONTRACT.md). Re-include them past the unanchored user-layer

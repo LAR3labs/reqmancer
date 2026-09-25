@@ -79,6 +79,21 @@ const CALL_SITES = [
     probe: 'flags-only',
   },
   {
+    // Local fork: the same file's runPortalScan spawns scan.mjs for web Discover.
+    source: 'web/src/lib/core/scan.ts',
+    script: 'scan.mjs',
+    args: ['--dry-run', '--portal-scan-json', '--since', '7'],
+    probe: 'flags-only',
+  },
+  {
+    // Local fork: runs `update-system.mjs check` — a positional subcommand, no
+    // flags. Running it would reach GitHub, so it is listed without a probe.
+    source: 'web/src/app/api/update-check/route.ts',
+    script: 'update-system.mjs',
+    args: ['check'],
+    probe: 'none',
+  },
+  {
     source: 'web/src/lib/core/pipeline.ts',
     script: null,
     args: [],
@@ -120,13 +135,19 @@ export function verifyWebStaticSources({ root = ROOT, reportPass = pass, reportF
   // Every `"--flag"` literal in a listed source must appear in its argv here.
   // This covers the argv literals the routes write inline; it does NOT cover a
   // flag assembled at runtime from a variable or a template string.
-  const flagDrift = [];
+  // A source can spawn more than one script, so check against the union of
+  // every listed site's argv for that source.
+  const argsBySource = new Map();
   for (const site of CALL_SITES) {
-    const src = readFileSync(join(root, site.source), 'utf-8');
+    argsBySource.set(site.source, [...(argsBySource.get(site.source) || []), ...site.args]);
+  }
+  const flagDrift = [];
+  for (const [source, args] of argsBySource) {
+    const src = readFileSync(join(root, source), 'utf-8');
     const literals = [...new Set([...src.matchAll(/"(--[a-z][a-z0-9-]*)"/g)].map((m) => m[1]))];
     for (const flag of literals) {
-      if (!site.args.includes(flag))
-        flagDrift.push(`${site.source} passes ${flag}, which no probe above covers`);
+      if (!args.includes(flag))
+        flagDrift.push(`${source} passes ${flag}, which no probe above covers`);
     }
   }
   if (flagDrift.length === 0)

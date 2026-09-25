@@ -109,8 +109,10 @@ const HOSTS = new Map([
   ['www.builtinchicago.org', 'www.builtinchicago.org'],
   ['builtincolorado.com', 'www.builtincolorado.com'],
   ['www.builtincolorado.com', 'www.builtincolorado.com'],
-  ['builtincharlotte.com', 'www.builtincharlotte.com'],
-  ['www.builtincharlotte.com', 'www.builtincharlotte.com'],
+  // Local fork: Charlotte is the reverse of the markets above — www 301s to
+  // the bare host (verified 2026-09-24), so the bare host is canonical.
+  ['builtincharlotte.com', 'builtincharlotte.com'],
+  ['www.builtincharlotte.com', 'builtincharlotte.com'],
 ]);
 
 // Drift guard thresholds. Both are deliberately loose: the guard exists to

@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test \"tests/**/*.test.mjs\" test-salary-format.mjs"
+    "test": "node --experimental-strip-types --test \"tests/**/*.test.mjs\""
   },
   "engines": {
     "node": ">=22.6.0"

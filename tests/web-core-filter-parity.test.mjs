@@ -48,6 +48,8 @@ try {
   const core = readFileSync(join(ROOT, 'scan.mjs'), 'utf8');
   const web = readFileSync(join(ROOT, 'web/src/lib/explore.ts'), 'utf8');
   const portalsTs = readFileSync(join(ROOT, 'web/src/lib/core/portals.ts'), 'utf8');
+  // serializePortals moved to portals-serialize.mjs upstream (#3102).
+  const portalsSerialize = readFileSync(join(ROOT, 'web/src/lib/core/portals-serialize.mjs'), 'utf8');
 
   // ── The bare-remote tier exists on both sides ────────────────────────────
   // The DECLARATION, not a mention: both files name BARE_REMOTE_RE in comments
@@ -68,7 +70,7 @@ try {
   // ── The flag reaches the scanner subprocess ──────────────────────────────
   // serializePortals writes the ephemeral config the in-app Scan runs against.
   // A scalar can't ride the keyword-list helper, so it needs its own line.
-  if (/allow_bare_remote/.test(fnBody(portalsTs, 'serializePortals'))) {
+  if (/allow_bare_remote/.test(fnBody(portalsSerialize, 'serializePortals'))) {
     pass('serializePortals emits allow_bare_remote into the ephemeral config');
   } else {
     fail('serializePortals drops allow_bare_remote — the in-app Scan would enforce a STRICTER policy than node scan.mjs');
