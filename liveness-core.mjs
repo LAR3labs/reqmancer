@@ -138,6 +138,48 @@ const APPLY_PATTERNS = [
 
 const MIN_CONTENT_CHARS = 300;
 
+// A posting's own schema.org JobPosting data says when it stops accepting
+// applications. Boards such as Built In keep serving the page, "Apply" button
+// included, long after that date: live postings carry a validThrough about 30
+// days out, dead ones a date months in the past. One day of grace absorbs
+// timezone and clock differences so a posting is never expired early.
+const VALID_THROUGH_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Find JobPosting.validThrough in the page's JSON-LD script bodies.
+ * Accepts a single object, an array, or an @graph wrapper per block, and
+ * ignores blocks that don't parse. Returns '' when there is no JobPosting
+ * with a validThrough value.
+ * @param {unknown} blocks - textContent of each script[type="application/ld+json"]
+ * @returns {string}
+ */
+export function jobPostingValidThrough(blocks) {
+  if (!Array.isArray(blocks)) return '';
+  const isJobPosting = (node) => {
+    const type = node?.['@type'];
+    return type === 'JobPosting' || (Array.isArray(type) && type.includes('JobPosting'));
+  };
+  for (const raw of blocks) {
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    const queue = Array.isArray(data) ? [...data] : [data];
+    while (queue.length) {
+      const node = queue.shift();
+      if (!node || typeof node !== 'object') continue;
+      if (Array.isArray(node['@graph'])) queue.push(...node['@graph']);
+      if (isJobPosting(node) && typeof node.validThrough === 'string' && node.validThrough.trim()) {
+        return node.validThrough.trim();
+      }
+    }
+  }
+  return '';
+}
+
 // A job-detail URL almost always carries the posting's identity: a numeric req id
 // (Greenhouse, Workday pid, Microsoft) or a UUID (Lever, Ashby). If the requested
 // URL had one and the final URL lost it, the browser landed somewhere else.
@@ -156,7 +198,7 @@ function hasApplyControl(controls = []) {
   return controls.some((control) => APPLY_PATTERNS.some((pattern) => pattern.test(control)));
 }
 
-export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '', bodyText: rawBodyText = '', applyControls: rawApplyControls = [] } = {}) {
+export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '', bodyText: rawBodyText = '', applyControls: rawApplyControls = [], validThrough = '', now = Date.now() } = {}) {
   const bodyText = normalizeForMatch(rawBodyText);
   const applyControls = (Array.isArray(rawApplyControls) ? rawApplyControls : []).map(normalizeForMatch);
 
@@ -215,6 +257,14 @@ export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '',
       code: 'redirected_off_posting',
       reason: `redirected to ${finalUrl} — job id "${jobId}" missing from final URL`,
     };
+  }
+
+  // After the redirect guard, so the JobPosting read is this posting's own, and
+  // before the apply-control check, because the stale pages this catches still
+  // render an Apply button.
+  const validThroughMs = typeof validThrough === 'string' && validThrough ? Date.parse(validThrough) : NaN;
+  if (Number.isFinite(validThroughMs) && validThroughMs + VALID_THROUGH_GRACE_MS < now) {
+    return { result: 'expired', code: 'valid_through_passed', reason: `JobPosting validThrough ${validThrough} has passed` };
   }
 
   if (hasApplyControl(applyControls)) {

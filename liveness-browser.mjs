@@ -5,7 +5,7 @@
  * Returns the same shape as classifyLiveness: { result, reason }.
  */
 
-import { classifyLiveness } from './liveness-core.mjs';
+import { classifyLiveness, jobPostingValidThrough } from './liveness-core.mjs';
 import {
   buildUserAgent,
   jitteredDelayMs as sharedJitteredDelayMs,
@@ -344,6 +344,18 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0 } = {}) {
     };
 
     let applyControls = await page.evaluate(extractApplyControls);
+    // The posting's own JobPosting.validThrough (schema.org JSON-LD). Optional:
+    // a page object without a real DOM (test doubles) just yields ''.
+    let validThrough = '';
+    try {
+      validThrough = jobPostingValidThrough(
+        await page.evaluate(() =>
+          [...document.querySelectorAll('script[type="application/ld+json"]')].map((el) => el.textContent || ''),
+        ),
+      );
+    } catch {
+      validThrough = '';
+    }
     let frameText = '';
 
     // Some ATS render the whole posting inside a same-origin iframe and leave the
@@ -391,7 +403,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0 } = {}) {
     // The status rule is NOT restated here. classifyLiveness owns it, so this
     // asks it and keys off the code it returns; a duplicated `status === 410`
     // would be a second copy of that rule waiting to drift.
-    const topLevelVerdict = classifyLiveness({ status, requestedUrl: url, finalUrl, bodyText, applyControls });
+    const topLevelVerdict = classifyLiveness({ status, requestedUrl: url, finalUrl, bodyText, applyControls, validThrough });
     if (topLevelVerdict.code === 'http_gone') {
       return topLevelVerdict;
     }
@@ -437,6 +449,7 @@ export async function checkUrlLiveness(page, url, { extraSettleMs = 0 } = {}) {
       finalUrl,
       bodyText: bodyText + frameText,
       applyControls,
+      validThrough,
     });
   } catch (err) {
     if (page && page._blockedByGuard) {
