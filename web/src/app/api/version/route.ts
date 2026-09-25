@@ -14,7 +14,9 @@ function readVersion(): string {
   const candidates = [path.join(process.cwd(), "..", "VERSION"), path.join(process.cwd(), "VERSION")];
   for (const p of candidates) {
     try {
-      const v = fs.readFileSync(p, "utf8").split(/\s+/)[0].trim();
+      // Candidate roots differ between `next dev` and the packaged app. They
+      // are runtime probes; asking Turbopack to trace `p` includes the project.
+      const v = fs.readFileSync(/* turbopackIgnore: true */ p, "utf8").split(/\s+/)[0].trim();
       if (v) return v;
     } catch {
       /* next candidate */
@@ -50,5 +52,7 @@ export async function GET() {
   // stay visible until the web graduates to 1.0.
   const channel = m ? m[1].toLowerCase() : web && /^0\./.test(web) ? "alpha" : "stable";
   const version = web ? `web ${web}` : coreVersion;
-  return Response.json({ version, coreVersion, channel, sha: shortSha() });
+  // `app` lets the desktop wrapper tell this server apart from any other local
+  // service that happens to answer /api/version on the same port.
+  return Response.json({ app: "career-ops", version, coreVersion, channel, sha: shortSha() });
 }

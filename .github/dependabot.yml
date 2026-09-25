@@ -5,13 +5,6 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
-    ignore:
-      # js-yaml v5 removed its default export, breaking `import yaml from 'js-yaml'`
-      # across ~18 files (verified: scan.mjs crashes, 58 test failures). Ignore ONLY
-      # the major bump — minor/patch (incl. 4.x security fixes) still flow. Migrating
-      # to v5 is a deliberate, owner-approved task; see PR #1 for the full writeup.
-      - dependency-name: "js-yaml"
-        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "gomod"
     directory: "/dashboard"

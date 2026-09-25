@@ -24,9 +24,12 @@ Supported inputs:
 1. `/career-ops email {report-number-or-slug}`
    - Load the matching `reports/{NNN}-*.md`.
    - Use the report header, score, archetype, PDF status, and evaluation content.
-   - If `data/pdf-index.tsv` contains a PDF for that report, mention it as the CV
-     attachment candidate. If no PDF is indexed, say that the CV should be
-     generated first via `/career-ops pdf {slug}` or attached manually.
+   - If `data/pdf-index.tsv` contains a row for that report, use that same row's
+     HTML companion to align the fit points with the tailored CV and mention its
+     PDF as the attachment candidate. If no usable tailored HTML is indexed,
+     select fit points from `cv.md`. If no PDF is indexed, say that the CV
+     should be generated first via `/career-ops pdf {slug}` or attached
+     manually.
 
 2. `/career-ops email {pasted JD}`
    - Use the pasted JD directly.
@@ -66,6 +69,7 @@ Read:
 - `config/profile.yml`
 - `cv.md`
 - `article-digest.md` if it exists
+- `modes/_writing.md` — shared writing guidance (Voice DNA guardrail, Writing Style calibration, Professional Writing rules). An application email is candidate-facing prose, the same category that module governs (#2006)
 - `modes/_profile.md` if it exists
 - `modes/_custom.md` if it exists
 - `voice-dna.md` if it exists, for writing style only
@@ -78,7 +82,36 @@ the email should be. It must never introduce contact details, work experience,
 or other factual claims.
 
 Use `voice-dna.md` only as a writing guardrail. It must never introduce factual
-claims.
+claims. Precedence for voice is unchanged: `modes/_profile.md` wins over
+`voice-dna.md`, which wins over the generic defaults in `_writing.md`. Loading
+the module adds a standard where this mode had none; it never overrides the
+user's own rules.
+
+`_writing.md` governs wording only. This mode's output contract — variants,
+attachment checklist, subject/body structure, the draft-only rule — is set here
+and is not affected by it.
+
+### Tailored CV alignment source
+
+For an invocation resolved to a report, normalize the report number when
+matching `data/pdf-index.tsv` (`008` and `8` are the same report). Ignore blank
+and comment rows. The manifest writer keeps one current row per report; if a
+hand-edited manifest contains duplicates, use the last matching row.
+
+Resolve the row's workspace-relative `pdf` and `html` columns against the
+workspace root (the directory that contains `data/`), matching the base used by
+the manifest writer. Use the HTML companion, never the PDF, as the readable
+representation of the attached CV. It is usable only when the resolved HTML
+path exists and is a file. Do not guess a similarly named file or silently use
+an artifact belonging to the same company but a different report.
+
+The tailored HTML is an **alignment guide, not a new source of truth**. It may
+control which supported bullets are selected and how they are ordered or
+framed, but every fact in the email must still be verified against the primary
+source-of-truth files above. If the row is absent, malformed, or its HTML file
+is unavailable, fall back explicitly to `cv.md` for fit-point selection. The
+PDF path may still be shown in the attachment checklist when that file exists,
+but never claim the body was aligned to it without a readable HTML companion.
 
 ### Profile fields
 
@@ -136,7 +169,13 @@ and follow the dedicated sections below instead of the Step 5 structures.
 
 ## Step 3 — Extract Fit Points
 
-From the report/JD and source-of-truth files, select 2-3 fit points:
+From the report/JD and source-of-truth files, select 2-3 fit points. When the
+Tailored CV alignment source resolved a usable HTML companion, prefer the
+proof points and emphasis present in that artifact so the body describes the
+CV being attached. Otherwise, use `cv.md` as the selection source and say that
+HTML alignment was unavailable and `cv.md` was used before presenting the
+draft. A missing HTML alignment source does not by itself mean the tailored PDF
+is missing.
 
 - One role-to-profile match: stack, domain, workflow, product type, or delivery
   style.
@@ -168,6 +207,11 @@ Attachments to include:
 Rules:
 - If `application_email.include_attachment_checklist` is `false`, omit this
   checklist.
+- For a report-based invocation, keep the PDF candidate from the selected
+  manifest row. When that row has a usable HTML companion, let it guide Step 3.
+  When it does not, use `cv.md` for Step 3 as described above, but still show
+  that row's PDF when the resolved PDF path exists. Do not select the prose
+  source and attachment from different rows.
 - Mention only files that exist or are indexed. Do not claim a cover letter
   exists unless it does.
 - Do not attach files or send anything.
@@ -352,8 +396,10 @@ Required, always ask for whatever is missing (do not invent any of these):
    same-day availability (intake item 3) when the missed slot was today.
 2. **The interviewer or recruiter's name**, exactly as given by the user —
    do not scrape or guess it from a report.
-3. **Remaining same-day availability** the user wants to offer (a window,
-   e.g. "before 4pm today" or "any time after 2:30").
+3. **Availability** the user wants to offer. If the missed slot was today,
+   ask for remaining same-day availability (e.g. "before 4pm today" or "any
+   time after 2:30"). If it was a previous day, ask for their next available
+   times instead.
 4. Company and role, for the subject line (from the linked report if one was
    given, otherwise ask).
 
@@ -363,7 +409,8 @@ Required, always ask for whatever is missing (do not invent any of these):
 2. One plain sentence stating the confirmed time and that the call did not
    happen. State it as a fact, not an accusation — no "I was very
    disappointed" or over-apologizing for pointing it out.
-3. One sentence offering the remaining same-day availability the user gave.
+3. One sentence offering the availability the user gave: same-day if the
+   missed slot was today, otherwise their next available times.
 4. One-line reaffirmation of interest — brief, not a resell of fit points
    (Step 3 is skipped for this variant).
 5. Signature.
@@ -379,7 +426,7 @@ framing (same banned-phrase rule as `modes/followup.md`).
   ("I waited...", "I understand things come up, but..."), no guilt framing,
   no exclamation points.
 - Never fabricate the confirmed time, the interviewer's name, or the
-  availability window — all three are user-provided inputs, never inferred
+  availability — all three are user-provided inputs, never inferred
   or scraped from a report.
 - Never speculate about why the call was missed (traffic, forgot, double
   booked). State the fact and move to the ask.
@@ -393,7 +440,8 @@ framing (same banned-phrase rule as `modes/followup.md`).
 ### Example (generic)
 
 All values are placeholders. Fill them only with details the user actually
-provides.
+provides. This example is for a slot missed earlier today; for a previous-day
+no-show, drop "today" and offer the user's next available times.
 
 ```text
 Subject: {Role} — following up on our {time} call
@@ -474,8 +522,12 @@ extra emphasis -- it should read as a practical note, not a demand.
 
 ## Style Rules
 
+`_writing.md` → Professional Writing & ATS Compatibility carries the shared
+cliché list and specifics-over-abstractions rule. These are the email-specific
+additions.
+
 - No corporate-speak.
-- No "passionate about", "perfect fit", "unique opportunity", or vague praise.
+- No "perfect fit", "unique opportunity", or vague praise (the shared list covers "passionate about" and its relatives).
 - No exaggerated authorship claims.
 - Short paragraphs. Prefer 150-250 words for HR applications.
 - Keep the proof easy to scan.

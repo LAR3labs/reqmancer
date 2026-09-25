@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Process signature
         id: apply
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           HAS_LEDGER_TOKEN: ${{ secrets.LEDGER_TOKEN != '' }}
           REVALIDATE_SECRET: ${{ secrets.SIGNATURES_REVALIDATE_SECRET }}
@@ -202,7 +202,7 @@ jobs:
       - name: Apply signature from PR metadata
         if: steps.gate.outputs.ok == 'true'
         id: applypr
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           HAS_LEDGER_TOKEN: ${{ secrets.LEDGER_TOKEN != '' }}
           REVALIDATE_SECRET: ${{ secrets.SIGNATURES_REVALIDATE_SECRET }}
@@ -282,7 +282,7 @@ jobs:
       discussions: write
     steps:
       - name: Confirm first-public-contribution
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           REVALIDATE_SECRET: ${{ secrets.SIGNATURES_REVALIDATE_SECRET }}
         with:

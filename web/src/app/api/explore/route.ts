@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { runDiscovery, runPortalScan } from "@/lib/core/scan";
 import { rootScript } from "@/lib/career-ops";
 import { parseExplorePatch, DEFAULT_FILTERS, type DiscoveredOffer, type ScanEvent } from "@/lib/explore";
+import { scannerMissingBody, SCANNER_MISSING_STATUS } from "@/lib/explore-error.mjs";
 
 // Discovery is HTTP-bound across many ATS boards; give it room. It is FREE —
 // zero LLM tokens (the scanner only does HTTP + JSON, and --dry-run writes nothing).
@@ -21,11 +22,10 @@ export async function POST(req: NextRequest) {
   const filters = parseExplorePatch(body, DEFAULT_FILTERS);
 
   // Guard: a data-only checkout (or pre-onboarding) has no scanner. Fail soft.
+  // The body carries an explicit code because 400 is a shared channel: the
+  // client cannot tell this apart from a malformed request by status alone.
   if (!fs.existsSync(rootScript("scan-ats-full"))) {
-    return Response.json(
-      { error: "The discovery scanner isn't available in this checkout yet." },
-      { status: 400 },
-    );
+    return Response.json(scannerMissingBody(), { status: SCANNER_MISSING_STATUS });
   }
 
   const encoder = new TextEncoder();
@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
   // them even after start() has walked away (same shape as lib/core/cli-stream.ts).
   let closed = false;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
+  // Aborted from cancel() so both scanner child processes stop when the client
+  // disconnects, instead of running to their timeouts.
+  const scanAbort = new AbortController();
   const stream = new ReadableStream({
     async start(controller) {
       let lastSent = Date.now();
@@ -92,8 +95,8 @@ export async function POST(req: NextRequest) {
       let offers: DiscoveredOffer[] = [];
       try {
         const [atsOffers, portalOffers] = await Promise.all([
-          filters.ats.length ? runDiscovery(filters, sendDeduped) : Promise.resolve([]),
-          filters.includePortals ? runPortalScan(filters, sendDeduped) : Promise.resolve([]),
+          filters.ats.length ? runDiscovery(filters, sendDeduped, scanAbort.signal) : Promise.resolve([]),
+          filters.includePortals ? runPortalScan(filters, sendDeduped, scanAbort.signal) : Promise.resolve([]),
         ]);
         const merged = new Set(atsOffers.map((o) => o.url));
         offers = [...atsOffers, ...portalOffers.filter((o) => !merged.has(o.url))];
@@ -112,9 +115,11 @@ export async function POST(req: NextRequest) {
       }
     },
     // The client navigated away / aborted: stop the heartbeat so it can't
-    // outlive the request and enqueue onto a dead controller.
+    // outlive the request and enqueue onto a dead controller, and stop the
+    // scanners so they don't keep running with nobody reading.
     cancel() {
       closed = true;
+      scanAbort.abort();
       if (heartbeat) {
         clearInterval(heartbeat);
         heartbeat = undefined;

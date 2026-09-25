@@ -6,6 +6,7 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import type { Application, InboxJob } from "@/lib/career-ops";
+import { normalizeTextKey } from "@/lib/core/normalize-text-key.mjs";
 import { paramsToFilters, paramsToAi, type ExploreFilters } from "@/lib/explore";
 import { FilterBuilder } from "./filter-builder";
 import { DiscoveringState } from "./discovering-state";
@@ -16,7 +17,8 @@ import { DeepSearchBox } from "./deep-search-box";
 import { ResultsList, type EnrichedOffer } from "./results-list";
 import { useExplore } from "./explore-provider";
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// Same shape as core normalizeTextKey(s, " ") — never [^a-z0-9] (#2666).
+const norm = (s: string) => normalizeTextKey(s, " ");
 const CLI_NAMES: Record<string, string> = {
   claude: "Claude Code",
   codex: "Codex",
@@ -40,7 +42,7 @@ export function ExplorerView({
   rootExists: boolean;
   portalSources?: { boards: string[]; companies: number };
 }) {
-  const { filters, setFilters, initFilters, phase, running, offers, discover, status, error, mode, setMode, aiIntent, setAiIntent, discoverAI, discoverDeep, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
+  const { filters, setFilters, initFilters, phase, running, offers, discover, loadFresh, status, error, scannerMissing, mode, setMode, aiIntent, setAiIntent, discoverAI, discoverDeep, companiesScanned, companiesAvailable, capHit, droppedNoDate, partial } = useExplore();
   const scanNote =
     companiesScanned > 0
       ? `Scanned ${companiesScanned.toLocaleString()}${companiesAvailable > companiesScanned ? ` of ${companiesAvailable.toLocaleString()}` : ""} compan${companiesScanned === 1 ? "y" : "ies"}${partial ? " · some sources were unreachable" : ""}.`
@@ -73,6 +75,15 @@ export function ExplorerView({
     if (ai !== null) {
       setMode("ai");
       setAiIntent(ai);
+    } else if (sp.get("view") === "fresh") {
+      // Today's "See all N" (#84) hands off here instead of a bare config form —
+      // load the SAME /api/whats-new offers it already showed, through the normal
+      // results-phase UI. The config form (Refine search / Re-cast) stays reachable.
+      // Force scan mode: a session restored in "ai" mode (sessionStorage rehydrate)
+      // must not show the AI-search UI for this scan-only hand-off.
+      setMode("scan");
+      initFilters(seed.filters);
+      void loadFresh();
     } else {
       // Onboarding hand-off: ?run=1 auto-fires the free scan + flags the first-run
       // banner (the "matches found from your CV, free" reveal).
@@ -81,7 +92,7 @@ export function ExplorerView({
         void discover();
       }
     }
-  }, [seed.filters, initFilters, setMode, setAiIntent, discover]);
+  }, [seed.filters, initFilters, setMode, setAiIntent, discover, loadFresh]);
 
   const inboxUrls = useMemo(() => new Set(inboxSnapshot.map((j) => j.url)), [inboxSnapshot]);
   const enriched: EnrichedOffer[] = useMemo(
@@ -160,7 +171,7 @@ export function ExplorerView({
                 rerunLabel="Run the free Scan"
               />
             )}
-            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverDeep()} />}
+            {phase === "failed" && <FailedCard msg={error || status} scannerMissing={scannerMissing} onRetry={() => void discoverDeep()} />}
           </div>
         )
       ) : isAi ? (
@@ -186,7 +197,7 @@ export function ExplorerView({
                 rerunLabel="Run the free Scan"
               />
             )}
-            {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discoverAI()} />}
+            {phase === "failed" && <FailedCard msg={error || status} scannerMissing={scannerMissing} onRetry={() => void discoverAI()} />}
           </div>
         )
       ) : (
@@ -263,7 +274,7 @@ export function ExplorerView({
               partial={partial}
             />
           )}
-          {phase === "failed" && <FailedCard msg={error || status} onRetry={() => void discover()} />}
+          {phase === "failed" && <FailedCard msg={error || status} scannerMissing={scannerMissing} onRetry={() => void discover()} />}
         </>
       )}
     </div>
@@ -364,10 +375,14 @@ function CappedBanner({ companiesScanned, companiesAvailable, onRefine }: { comp
   );
 }
 
-function FailedCard({ msg, onRetry }: { msg: string; onRetry: () => void }) {
-  // The scanner-missing 400 (data-only / pre-scan-ats-full checkout) must NOT
+function FailedCard({ msg, scannerMissing, onRetry }: { msg: string; scannerMissing: boolean; onRetry: () => void }) {
+  // The scanner-missing case (data-only / pre-scan-ats-full checkout) must NOT
   // offer a "Try again" that re-fails forever — give a real next step instead.
-  const scannerMissing = /isn'?t available|data only|complete career-ops checkout|scanner/i.test(msg);
+  // The caller decides this from the response body's SCANNER_MISSING code, never
+  // from the error text and never from the bare 400: a runtime scan error ("The
+  // scanner returned no readable output.") mentions the scanner too, and 400 is
+  // a shared channel that also carries malformed-request and MODE_MISSING
+  // failures. Neither may be misreported as a broken checkout.
   if (scannerMissing) {
     return (
       <div className="rounded-2xl border border-border bg-surface/30 px-6 py-10 text-center">

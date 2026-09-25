@@ -56,8 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
         var req = URLRequest(url: appURL.appendingPathComponent("api/version"))
         req.timeoutInterval = 2
         URLSession.shared.dataTask(with: req) { data, resp, _ in
+            // Parse the body and require the app's own marker; a substring
+            // match on "version" would accept any service's version endpoint.
+            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
             let ok = (resp as? HTTPURLResponse)?.statusCode == 200
-                && data.map { String(decoding: $0, as: UTF8.self).contains("\"version\"") } == true
+                && (json?["app"] as? String) == "career-ops"
             done(ok)
         }.resume()
     }

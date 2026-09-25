@@ -67,10 +67,16 @@ try {
     pass('remoteok.fetch() keeps 2 valid jobs (drops metadata row, null, non-object, empty-position, bad-url rows)');
   else fail(`remoteok.fetch() returned ${fetched.length} jobs (expected 2): ${JSON.stringify(fetched)}`);
 
-  // Normalized shape: exactly { title, url, company, location }.
-  if (fetched[0] && Object.keys(fetched[0]).sort().join(',') === 'company,location,title,url')
-    pass('remoteok.fetch() returns the normalized { title, url, company, location } shape');
-  else fail(`remoteok.fetch() row 0 keys = ${JSON.stringify(fetched[0] && Object.keys(fetched[0]))}`);
+  // Normalized shape: { title, url, company, location }, plus postedAt when the
+  // row carries a date (row 0 does; row 1 has none, so it must not grow one).
+  if (fetched[0] && Object.keys(fetched[0]).sort().join(',') === 'company,location,postedAt,title,url'
+    && fetched[1] && Object.keys(fetched[1]).sort().join(',') === 'company,location,title,url')
+    pass('remoteok.fetch() returns { title, url, company, location } plus postedAt only when dated');
+  else fail(`remoteok.fetch() keys = ${JSON.stringify([fetched[0], fetched[1]].map((r) => r && Object.keys(r)))}`);
+
+  if (fetched[0]?.postedAt === Date.parse('2026-07-01T00:00:00+00:00'))
+    pass('remoteok.fetch() maps the ISO date to postedAt (epoch ms)');
+  else fail(`remoteok.fetch() postedAt = ${JSON.stringify(fetched[0]?.postedAt)}`);
 
   if (fetched[0]?.title === 'Staff AI Engineer'
       && fetched[0]?.url === 'https://remoteok.com/remote-jobs/acme-staff-ai-engineer'
