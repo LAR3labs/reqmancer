@@ -42,6 +42,7 @@ jobs:
         run: node validate-plugin-registry.mjs --deep
 
       - name: One plugin per PR
+        if: github.repository == 'santifer/career-ops'
         # base_ref goes through env, never ${{ }}-spliced into the script —
         # anything expanded inside run: is literal shell code (template injection).
         env:
