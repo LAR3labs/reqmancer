@@ -33,11 +33,19 @@ export default {
       .filter(j => j && typeof j === 'object'
         && typeof j.position === 'string' && j.position.trim() !== ''
         && typeof j.url === 'string' && /^https?:\/\//i.test(j.url.trim()))
-      .map(j => ({
-        title: j.position.trim(),
-        url: j.url.trim(),
-        company: typeof j.company === 'string' && j.company.trim() ? j.company.trim() : (entry.name || 'RemoteOK'),
-        location: typeof j.location === 'string' ? j.location.trim() : '',
-      }));
+      .map(j => {
+        const job = {
+          title: j.position.trim(),
+          url: j.url.trim(),
+          company: typeof j.company === 'string' && j.company.trim() ? j.company.trim() : (entry.name || 'RemoteOK'),
+          location: typeof j.location === 'string' ? j.location.trim() : '',
+        };
+        // Without postedAt every row passes the posting-age filter, so a stale
+        // listing reads as fresh. The feed carries both `epoch` (seconds) and an
+        // ISO `date`; prefer epoch, fall back to date.
+        const postedAt = Number.isFinite(j.epoch) && j.epoch > 0 ? j.epoch * 1000 : Date.parse(j.date);
+        if (Number.isFinite(postedAt)) job.postedAt = postedAt;
+        return job;
+      });
   },
 };

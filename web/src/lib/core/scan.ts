@@ -109,7 +109,11 @@ type PortalScanJson = {
   errors?: number;
 };
 
-export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) => void): Promise<DiscoveredOffer[]> {
+export function runPortalScan(
+  filters: ExploreFilters,
+  onEvent: (e: ScanEvent) => void,
+  signal?: AbortSignal,
+): Promise<DiscoveredOffer[]> {
   return new Promise((resolve) => {
     // On a portals-only run (no ATS engine to emit its own summary), a bail-out
     // must still send an empty summary — otherwise the client reads
@@ -141,6 +145,19 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
       cwd: careerOpsRoot(),
       env: { ...process.env },
     });
+
+    // The client went away (route cancel()): stop the scanner instead of letting
+    // it run to its timeout with nobody reading the result.
+    const onAbort = () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        /* ignore */
+      }
+    };
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+    child.on("close", () => signal?.removeEventListener("abort", onAbort));
 
     const offers: DiscoveredOffer[] = [];
     const seen = new Set<string>();
@@ -260,7 +277,11 @@ function readScanTimeoutMs(): number {
   }
 }
 
-export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) => void): Promise<DiscoveredOffer[]> {
+export function runDiscovery(
+  filters: ExploreFilters,
+  onEvent: (e: ScanEvent) => void,
+  signal?: AbortSignal,
+): Promise<DiscoveredOffer[]> {
   return new Promise((resolve) => {
     const tempPortals = writeTempPortals(filters);
     const ats = (filters.ats.length ? filters.ats : [...ATS_SOURCES]).filter((a) => (ATS_SOURCES as readonly string[]).includes(a));
@@ -281,6 +302,19 @@ export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) =>
       cwd: careerOpsRoot(),
       env: { ...process.env, CAREER_OPS_PORTALS: tempPortals },
     });
+
+    // The client went away (route cancel()): stop the scanner instead of letting
+    // it run to its timeout with nobody reading the result.
+    const onAbort = () => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        /* ignore */
+      }
+    };
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+    child.on("close", () => signal?.removeEventListener("abort", onAbort));
 
     const offers: DiscoveredOffer[] = [];
     const seen = new Set<string>();

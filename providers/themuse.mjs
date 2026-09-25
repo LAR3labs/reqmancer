@@ -102,11 +102,12 @@ function assertMuseUrl(url) {
  *   refs.landing_page → url
  *   company.name      → company
  *   locations[0].name → location
+ *   publication_date  → postedAt (epoch ms, omitted when absent/unparseable)
  *
  * Returns null when required fields (title or url) are missing or invalid.
  *
  * @param {any} j
- * @returns {{ title: string, url: string, company: string, location: string } | null}
+ * @returns {{ title: string, url: string, company: string, location: string, postedAt?: number } | null}
  */
 export function normalizeMuseJob(j) {
   if (!j || typeof j !== 'object') return null;
@@ -122,7 +123,10 @@ export function normalizeMuseJob(j) {
     Array.isArray(j.locations) && j.locations.length > 0 && typeof j.locations[0]?.name === 'string'
       ? j.locations[0].name.trim()
       : '';
-  return { title, url, company, location };
+  // publication_date (ISO) → postedAt, so the posting-age filter can judge
+  // Muse rows instead of passing every one of them as undated.
+  const postedAt = typeof j.publication_date === 'string' ? Date.parse(j.publication_date) : NaN;
+  return Number.isFinite(postedAt) ? { title, url, company, location, postedAt } : { title, url, company, location };
 }
 
 /** @type {Provider} */

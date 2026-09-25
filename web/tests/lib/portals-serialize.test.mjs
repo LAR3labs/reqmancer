@@ -50,3 +50,10 @@ test("a keyword that could break YAML is quoted, not injected", () => {
   const doc = yaml.load(serializePortals({ ...empty, blockHard: ["a: b", "- x", '"q"'] }));
   assert.deepEqual(doc.location_filter.block_hard, ["a: b", "- x", '"q"']);
 });
+
+test("a filter-free config is still a YAML document js-yaml 5 can load", () => {
+  const out = serializePortals({ positive: [], negative: [], allow: [], block: [], alwaysAllow: [], blockHard: [] });
+  // js-yaml 5 throws "expected a document, but the input is empty" on a
+  // comment-only file; the ATS scan read this file and failed outright.
+  assert.deepEqual(yaml.load(out), {});
+});

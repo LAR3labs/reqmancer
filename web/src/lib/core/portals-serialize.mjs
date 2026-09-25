@@ -29,7 +29,8 @@ function block(key, items) {
  * @returns {string}
  */
 export function serializePortals(f) {
-  let out = "# Ephemeral Explorer filters — generated per-search, safe to delete.\n";
+  const header = "# Ephemeral Explorer filters — generated per-search, safe to delete.\n";
+  let out = header;
   if (f.positive.length || f.negative.length) {
     out += "title_filter:\n";
     out += block("positive", f.positive);
@@ -45,5 +46,10 @@ export function serializePortals(f) {
     out += block("allow", f.allow);
     out += block("block", f.block);
   }
+  // A broad search (no title or location filters) would otherwise leave only
+  // the comment line. js-yaml 5 throws on a document with no content ("expected
+  // a document, but the input is empty"), which failed the whole ATS scan.
+  // An explicit empty mapping keeps the file a valid, filter-free config.
+  if (out === header) out += "{}\n";
   return out;
 }

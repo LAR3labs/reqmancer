@@ -333,6 +333,24 @@ try {
     }
   }
 
+  {
+    const dated = normalizeMuseJob({
+      name: 'Data Engineer',
+      refs: { landing_page: 'https://www.themuse.com/jobs/acme/data-engineer' },
+      company: { name: 'Acme' },
+      locations: [{ name: 'Remote' }],
+      publication_date: '2026-09-10T18:39:30Z',
+    });
+    if (dated?.postedAt === Date.parse('2026-09-10T18:39:30Z')) pass('normalizeMuseJob maps publication_date → postedAt');
+    else fail(`normalizeMuseJob postedAt = ${JSON.stringify(dated?.postedAt)}`);
+    const undated = normalizeMuseJob({
+      name: 'Data Engineer',
+      refs: { landing_page: 'https://www.themuse.com/jobs/acme/data-engineer' },
+      publication_date: 'not a date',
+    });
+    if (undated && !('postedAt' in undated)) pass('normalizeMuseJob omits postedAt when publication_date is unparseable');
+    else fail(`normalizeMuseJob undated = ${JSON.stringify(undated)}`);
+  }
 } catch (e) {
   fail(`themuse provider tests crashed: ${e.message}`);
 }
