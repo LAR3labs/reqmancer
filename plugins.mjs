@@ -19,7 +19,7 @@
 import path from 'path';
 import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 import {
   discoverPlugins, pluginRoots, loadPluginConfig, pluginStatus,

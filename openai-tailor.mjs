@@ -20,7 +20,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 try {
   const { config } = await import('dotenv');

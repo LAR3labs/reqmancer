@@ -59,7 +59,7 @@ import {
   formatReportNumber, releaseReportNumbers, reserveReportNumbers,
 } from './reserve-report-num.mjs';
 import { buildBudgetedPrompt } from './lib/context-budget.mjs';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 // ---------------------------------------------------------------------------
 // Bootstrap: load .env before anything else

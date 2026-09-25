@@ -17,7 +17,7 @@ import { readFileSync, existsSync, realpathSync, writeFileSync, symlinkSync, rmS
 import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { isMainModule } from './lib/is-main-module.mjs';
-import { load as yamlLoad } from 'js-yaml';
+import { load as yamlLoad } from './yaml-compat.mjs';
 import { resolveColumns, parseTrackerRow, normalizeVia } from './tracker-parse.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';

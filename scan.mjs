@@ -57,7 +57,7 @@ import {
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 import { makeHttpCtx } from './providers/_http.mjs';
 import { buildTrustValidator } from './providers/_trust-validator.mjs';

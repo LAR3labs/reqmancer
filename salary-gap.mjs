@@ -31,7 +31,7 @@ import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { getCareerOpsRoot } from './path-resolver.mjs';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const CAREER_OPS = getCareerOpsRoot();

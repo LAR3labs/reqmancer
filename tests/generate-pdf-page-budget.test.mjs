@@ -40,6 +40,7 @@ copyFileSync(join(ROOT, 'generate-pdf.mjs'), script);
 // theming, #1837); copy it into the sandbox too or the isolated script fails
 // to load with ERR_MODULE_NOT_FOUND before it can parse any --max-pages arg.
 copyFileSync(join(ROOT, 'theme-style.mjs'), join(sandbox, 'theme-style.mjs'));
+copyFileSync(join(ROOT, 'yaml-compat.mjs'), join(sandbox, 'yaml-compat.mjs'));
 // generate-pdf resolves output and manifest paths from the tracker-owned
 // workspace. Copy the shared resolver and its local parser dependency so this
 // remains a genuinely isolated CLI test.

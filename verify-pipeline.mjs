@@ -532,7 +532,7 @@ if (!existsSync(PORTALS_FILE)) {
     const { findUnclaimedEntries } = await import('./audit-portals.mjs');
     const { loadProviders } = await import('./providers/_registry.mjs');
     const { mergeProviderPlugins } = await import('./plugins/_engine.mjs');
-    const yaml = await import('js-yaml');
+    const yaml = await import('./yaml-compat.mjs');
 
     const cfg = yaml.load(readFileSync(PORTALS_FILE, 'utf-8')) || {};
     // Both sections, because scan.mjs resolves both through the same registry:

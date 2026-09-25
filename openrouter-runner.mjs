@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { outputLanguageInstruction, parseOutputLanguage } from './profile-language.mjs';
 import { TSV_ADDITION_HEADER } from './tracker-parse.mjs';
 import { normalizedTrackerScore } from './lib/tracker-addition.mjs';

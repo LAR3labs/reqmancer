@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import * as yaml from "js-yaml";
+import * as yaml from "./yaml-compat.mjs";
 import { atomicWrite } from "@/lib/core/safe-write";
 import { resolveDataRoot } from "@/lib/core/data-root.mjs";
 import { parseApplications } from "@/lib/tracker-table.mjs";

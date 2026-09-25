@@ -14,7 +14,7 @@ try {
 } catch (e) {}
 
 import { readFileSync, existsSync } from 'fs';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { appendToPipeline, appendToScanHistory, loadSeenUrls, PORTALS_PATH } from './scan.mjs';
 import { localToday } from './lib/local-today.mjs';
