@@ -347,7 +347,7 @@ export function computePortalStats(portalsYmlContent, scanStats, producingCompan
   const companies = Array.isArray(cfg.tracked_companies) ? cfg.tracked_companies : [];
   const boards = Array.isArray(cfg.job_boards) ? cfg.job_boards : [];
   const configuredNames = new Set(
-    companies.map((c) => String(c?.name || '').toLowerCase()).filter(Boolean),
+    companies.map((c) => String(c?.name || '').trim().toLowerCase()).filter(Boolean),
   );
   const producing = new Set(producingCompanyNames.map((n) => String(n).toLowerCase()));
   let producingCompanies = 0;

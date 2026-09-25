@@ -60,6 +60,7 @@ export const DEFAULT_FILTERS: ExploreFilters = {
  * path; the semantics must stay identical to the core builder:
  *
  *   blank/non-string location → pass (never penalize missing provider data)
+ *   block_hard hit            → reject (the one tier always_allow cannot beat)
  *   always_allow hit          → pass (beats block, for multi-region strings)
  *   block hit                 → reject
  *   allow empty               → pass (block already cleared it)
@@ -68,24 +69,37 @@ export const DEFAULT_FILTERS: ExploreFilters = {
 /** Anchored bare-"Remote" test. Keep in sync with scan.mjs::BARE_REMOTE_RE. */
 const BARE_REMOTE_RE = /^[\s\-\u2013\u2014(\[]*remote[\s\-\u2013\u2014.)\]]*$/i;
 
+/** Word-boundary keyword test, mirroring scan.mjs::compileLocationKeyword so
+ *  "india" never matches "Indiana" here while the core scanner rejects it. */
+function locationKeywordMatcher(keyword: string): (lower: string) => boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const prefix = /[a-z0-9]/.test(keyword[0]) ? "(?<![a-z0-9])" : "";
+  const suffix = /[a-z0-9]/.test(keyword[keyword.length - 1]) ? "(?![a-z0-9])" : "";
+  const re = new RegExp(`${prefix}${escaped}${suffix}`);
+  return (lower) => re.test(lower);
+}
+
 export function buildLocationMatcher(
-  f: Pick<ExploreFilters, "allow" | "block" | "alwaysAllow"> & { allowBareRemote?: boolean },
+  f: Pick<ExploreFilters, "allow" | "block" | "alwaysAllow"> & { blockHard?: string[]; allowBareRemote?: boolean },
 ): (location: string) => boolean {
-  const norm = (list: string[]) => cleanFilterList(list).map((k) => k.toLowerCase());
-  const alwaysAllow = norm(f.alwaysAllow);
-  const allow = norm(f.allow);
-  const block = norm(f.block);
+  const compile = (list: string[] | undefined) =>
+    cleanFilterList(list ?? []).map((k) => locationKeywordMatcher(k.toLowerCase()));
+  const blockHard = compile(f.blockHard);
+  const alwaysAllow = compile(f.alwaysAllow);
+  const allow = compile(f.allow);
+  const block = compile(f.block);
   const allowBareRemote = f.allowBareRemote === true;
-  if (!alwaysAllow.length && !allow.length && !block.length) return () => true;
+  if (!blockHard.length && !alwaysAllow.length && !allow.length && !block.length) return () => true;
 
   return (location: string) => {
     if (typeof location !== "string" || location.trim() === "") return true;
     const lower = location.toLowerCase();
-    if (alwaysAllow.length > 0 && alwaysAllow.some((k) => lower.includes(k))) return true;
-    if (block.length > 0 && block.some((k) => lower.includes(k))) return false;
+    if (blockHard.some((m) => m(lower))) return false;
+    if (alwaysAllow.some((m) => m(lower))) return true;
+    if (block.some((m) => m(lower))) return false;
     if (allowBareRemote && BARE_REMOTE_RE.test(location)) return true;
     if (allow.length === 0) return true;
-    return allow.some((k) => lower.includes(k));
+    return allow.some((m) => m(lower));
   };
 }
 

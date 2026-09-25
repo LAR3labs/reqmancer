@@ -505,8 +505,19 @@ export function createHeadedPageProvider(chromium, { persist = true } = {}) {
             // best-effort teardown
           }
         }
+        // Persistent mode holds a context, not a browser. Close it too, or the
+        // old headed Chrome keeps the profile locked, the relaunch below fails,
+        // and the stale window outlives the run with no handle left to close.
+        if (context) {
+          try {
+            await context.close();
+          } catch {
+            // best-effort teardown
+          }
+        }
         page = null;
         browser = null;
+        context = null;
       }
       if (page) return page;
       if (launchFailed) return null;
