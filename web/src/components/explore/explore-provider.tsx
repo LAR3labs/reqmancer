@@ -148,6 +148,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   const [aiTrace, setAiTrace] = useState<AiTraceChunk[]>([]);
   const [aiCost, setAiCost] = useState<AiCost>({ searches: 0, candidates: 0, fetches: 0 });
   const runningRef = useRef(false);
+  const agentRunRef = useRef(0);
   const aiIntentRef = useRef(aiIntent);
   aiIntentRef.current = aiIntent;
   const filtersRef = useRef(filters);
@@ -166,6 +167,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
 
   const discover = useCallback(async () => {
     if (runningRef.current) return;
+    agentRunRef.current++;
     const f = filtersRef.current;
     runningRef.current = true;
     setPhase("casting");
@@ -312,6 +314,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   // — no scan, so it never touches sources/companiesScanned like discover() does.
   const loadFresh = useCallback(async () => {
     if (runningRef.current) return;
+    agentRunRef.current++;
     runningRef.current = true;
     setPhase("casting");
     setStatus("Loading fresh matches…");
@@ -461,6 +464,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   }, [discover]);
 
   const reset = useCallback(() => {
+    agentRunRef.current++;
     runningRef.current = false;
     setPhase("idle");
     setOffers([]);
@@ -502,6 +506,8 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       setPhase("blocked");
       return;
     }
+    const runId = ++agentRunRef.current;
+    const isCurrent = () => agentRunRef.current === runId;
     runningRef.current = true;
     setPhase("casting");
     setOffers([]);
@@ -534,6 +540,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* best-effort dedup */
     }
+    if (!isCurrent()) return;
     // AI search runs on a free-text intent, but the user's LOCATION policy still
     // applies — it's a hard constraint, not a search term. filtersRef is seeded
     // from portals.yml on mount, so this is the same allow/block/always_allow the
@@ -552,47 +559,61 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
     // boards, and the agent's postedHint is not evidence of a posting date.
     let deadRejects = 0;
     let staleRejects = 0;
-    const pending: Promise<void>[] = [];
+    const queued: DiscoveredOffer[] = [];
+    const pending = new Set<Promise<void>>();
     const admit = (offer: DiscoveredOffer) => {
+      if (!isCurrent()) return;
       acc.push(offer);
       setOffers((o) => [...o, offer]);
       setMatchCount(acc.length);
       setAiCost((c) => ({ ...c, candidates: acc.length }));
     };
+    const checkOffer = async (initialOffer: DiscoveredOffer) => {
+      let offer = initialOffer;
+      try {
+        const r = await fetch("/api/explore/liveness", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: [offer.url] }),
+        });
+        const d = (await r.json()) as { results?: { state?: string; postedAt?: string }[] };
+        const verdict = d.results?.[0];
+        // Only a DEFINITIVE "expired" drops a candidate; anything else shows.
+        if (verdict?.state === "expired") {
+          deadRejects++;
+          return;
+        }
+        if (verdict?.postedAt && isOlderThanWindow(verdict.postedAt, sinceDays)) {
+          staleRejects++;
+          return;
+        }
+        offer = {
+          ...offer,
+          postedAt: verdict?.postedAt || "",
+          postedHint: undefined,
+          verification: verdict?.state === "active" ? "active" : "unconfirmed",
+        };
+      } catch {
+        offer = { ...offer, postedHint: undefined };
+      }
+      admit(offer);
+    };
+    const pump = () => {
+      while (isCurrent() && pending.size < 4 && queued.length > 0) {
+        const offer = queued.shift()!;
+        const task = checkOffer(offer).finally(() => {
+          pending.delete(task);
+          pump();
+        });
+        pending.add(task);
+      }
+    };
     const gate = (offer: DiscoveredOffer) => {
-      pending.push(
-        (async () => {
-          try {
-            const r = await fetch("/api/explore/liveness", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ urls: [offer.url] }),
-            });
-            const d = (await r.json()) as { results?: { state?: string; postedAt?: string }[] };
-            const verdict = d.results?.[0];
-            // Only a DEFINITIVE "expired" drops a candidate; anything else shows.
-            if (verdict?.state === "expired") {
-              deadRejects++;
-              return;
-            }
-            if (verdict?.postedAt && isOlderThanWindow(verdict.postedAt, sinceDays)) {
-              staleRejects++;
-              return;
-            }
-            offer = {
-              ...offer,
-              postedAt: verdict?.postedAt || "",
-              postedHint: undefined,
-              verification: verdict?.state === "active" ? "active" : "unconfirmed",
-            };
-          } catch {
-            offer = { ...offer, postedHint: undefined };
-          }
-          admit(offer);
-        })(),
-      );
+      queued.push(offer);
+      pump();
     };
     const handle = (chunks: AiTraceChunk[]) => {
+      if (!isCurrent()) return;
       for (const ch of chunks) {
         if (ch.kind === "offer") {
           gate(ch.offer);
@@ -615,6 +636,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(opts.requireIntent ? { query: intent, cliId } : { cliId }),
       });
+      if (!isCurrent()) return;
       if (r.status === 404) {
         runningRef.current = false;
         setPhase("blocked");
@@ -636,19 +658,27 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
         const dec = new TextDecoder();
         for (;;) {
           const { value, done } = await reader.read();
+          if (!isCurrent()) {
+            await reader.cancel();
+            return;
+          }
           if (done) break;
           handle(parser.feed(dec.decode(value, { stream: true })));
         }
         handle(parser.flush());
       }
     } catch (e) {
+      if (!isCurrent()) return;
       sawError = e instanceof Error ? e.message : "stream error";
     }
 
     // The stream is done, but in-flight liveness checks are not. Settle them
     // before reading acc/deadRejects, or the summary undercounts the candidates
     // still being confirmed.
-    await Promise.all(pending);
+    while (isCurrent() && (queued.length > 0 || pending.size > 0)) {
+      await Promise.all([...pending]);
+    }
+    if (!isCurrent()) return;
     runningRef.current = false;
     // A hunt that found plenty but filtered most of it out must SAY so — otherwise
     // "2 candidates" reads as a weak search rather than a working location policy.
@@ -661,7 +691,9 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       setMatchCount(acc.length);
       setPhase("revealing");
       setStatus(`${acc.length} candidate${acc.length === 1 ? "" : "s"} found.${droppedNote}`);
-      window.setTimeout(() => setPhase("results"), 850);
+      window.setTimeout(() => {
+        if (isCurrent()) setPhase("results");
+      }, 850);
     } else if (sawError) {
       setError(sawError);
       setScannerMissing(sawScannerMissing);
@@ -700,6 +732,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
   // not throw away a completed search (disc#5). A new search (discover/discoverAI)
   // clears + repopulates; an explicit reset() clears. Just stop any half-run.
   const setMode = useCallback((m: ExploreMode) => {
+    agentRunRef.current++;
     runningRef.current = false;
     setModeState(m);
   }, []);
