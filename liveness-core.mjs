@@ -186,8 +186,16 @@ export function jobPostingValidThrough(blocks) {
 
 export function jobPostingDatePosted(blocks) {
   const raw = jobPostingField(blocks, 'datePosted');
-  const ms = Date.parse(raw);
-  return raw && Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : '';
+  // Use the date declared by the posting. Converting an offsetless date-time
+  // through the scanner's local timezone can move it to another calendar day.
+  const shape = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(raw);
+  if (!shape) return '';
+  const [, year, month, day, hour, minute, second] = shape;
+  const calendar = new Date(0);
+  calendar.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
+  if (calendar.getUTCFullYear() !== Number(year) || calendar.getUTCMonth() !== Number(month) - 1 || calendar.getUTCDate() !== Number(day)) return '';
+  if (hour !== undefined && (Number(hour) > 23 || Number(minute) > 59 || (second !== undefined && Number(second) > 59))) return '';
+  return Number.isFinite(Date.parse(raw)) ? `${year}-${month}-${day}` : '';
 }
 
 // A job-detail URL almost always carries the posting's identity: a numeric req id

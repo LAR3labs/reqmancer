@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { checkLiveness } from "@/lib/core/liveness";
+import { admitLivenessRequest } from "@/lib/core/liveness-admission.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,5 +16,11 @@ export async function POST(req: NextRequest) {
     return Response.json({ results: [], error: "bad request" }, { status: 400 });
   }
   if (urls.length === 0) return Response.json({ results: [] });
-  return Response.json({ results: await checkLiveness(urls) });
+  const release = admitLivenessRequest();
+  if (!release) return Response.json({ results: [], error: "liveness checker busy" }, { status: 429 });
+  try {
+    return Response.json({ results: await checkLiveness(urls) });
+  } finally {
+    release();
+  }
 }
