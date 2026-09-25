@@ -153,7 +153,7 @@ const VALID_THROUGH_GRACE_MS = 24 * 60 * 60 * 1000;
  * @param {unknown} blocks - textContent of each script[type="application/ld+json"]
  * @returns {string}
  */
-export function jobPostingValidThrough(blocks) {
+function jobPostingField(blocks, field) {
   if (!Array.isArray(blocks)) return '';
   const isJobPosting = (node) => {
     const type = node?.['@type'];
@@ -172,12 +172,22 @@ export function jobPostingValidThrough(blocks) {
       const node = queue.shift();
       if (!node || typeof node !== 'object') continue;
       if (Array.isArray(node['@graph'])) queue.push(...node['@graph']);
-      if (isJobPosting(node) && typeof node.validThrough === 'string' && node.validThrough.trim()) {
-        return node.validThrough.trim();
+      if (isJobPosting(node) && typeof node[field] === 'string' && node[field].trim()) {
+        return node[field].trim();
       }
     }
   }
   return '';
+}
+
+export function jobPostingValidThrough(blocks) {
+  return jobPostingField(blocks, 'validThrough');
+}
+
+export function jobPostingDatePosted(blocks) {
+  const raw = jobPostingField(blocks, 'datePosted');
+  const ms = Date.parse(raw);
+  return raw && Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : '';
 }
 
 // A job-detail URL almost always carries the posting's identity: a numeric req id

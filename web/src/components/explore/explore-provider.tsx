@@ -17,6 +17,7 @@ import {
   type ScanEvent,
 } from "@/lib/explore";
 import { makeAiStreamParser, type AiTraceChunk } from "@/lib/explore-ai";
+import { isOlderThanWindow } from "@/lib/explore-freshness.mjs";
 import { MAX_OFFER_LIMIT } from "@/lib/whats-new.mjs";
 import { isScannerMissing } from "@/lib/explore-error.mjs";
 
@@ -542,17 +543,59 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       locationOk: buildLocationMatcher(filtersRef.current),
       source: opts.source,
     });
+    const sinceDays = filtersRef.current.sinceDays;
 
     const acc: DiscoveredOffer[] = [];
     let sawError = "";
     let sawScannerMissing = false; // the structured 400 (capability absent from this checkout), not a runtime error
+    // Check each streamed candidate before showing it. Search indexes lag job
+    // boards, and the agent's postedHint is not evidence of a posting date.
+    let deadRejects = 0;
+    let staleRejects = 0;
+    const pending: Promise<void>[] = [];
+    const admit = (offer: DiscoveredOffer) => {
+      acc.push(offer);
+      setOffers((o) => [...o, offer]);
+      setMatchCount(acc.length);
+      setAiCost((c) => ({ ...c, candidates: acc.length }));
+    };
+    const gate = (offer: DiscoveredOffer) => {
+      pending.push(
+        (async () => {
+          try {
+            const r = await fetch("/api/explore/liveness", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ urls: [offer.url] }),
+            });
+            const d = (await r.json()) as { results?: { state?: string; postedAt?: string }[] };
+            const verdict = d.results?.[0];
+            // Only a DEFINITIVE "expired" drops a candidate; anything else shows.
+            if (verdict?.state === "expired") {
+              deadRejects++;
+              return;
+            }
+            if (verdict?.postedAt && isOlderThanWindow(verdict.postedAt, sinceDays)) {
+              staleRejects++;
+              return;
+            }
+            offer = {
+              ...offer,
+              postedAt: verdict?.postedAt || "",
+              postedHint: undefined,
+              verification: verdict?.state === "active" ? "active" : "unconfirmed",
+            };
+          } catch {
+            offer = { ...offer, postedHint: undefined };
+          }
+          admit(offer);
+        })(),
+      );
+    };
     const handle = (chunks: AiTraceChunk[]) => {
       for (const ch of chunks) {
         if (ch.kind === "offer") {
-          acc.push(ch.offer);
-          setOffers((o) => [...o, ch.offer]);
-          setMatchCount(acc.length);
-          setAiCost((c) => ({ ...c, candidates: acc.length }));
+          gate(ch.offer);
           setPhase("hunting");
         } else {
           setAiTrace((t) => [...t, ch]);
@@ -602,11 +645,18 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       sawError = e instanceof Error ? e.message : "stream error";
     }
 
+    // The stream is done, but in-flight liveness checks are not. Settle them
+    // before reading acc/deadRejects, or the summary undercounts the candidates
+    // still being confirmed.
+    await Promise.all(pending);
     runningRef.current = false;
     // A hunt that found plenty but filtered most of it out must SAY so — otherwise
     // "2 candidates" reads as a weak search rather than a working location policy.
     const dropped = parser.locationRejects();
-    const droppedNote = dropped > 0 ? ` ${dropped} outside your location filter.` : "";
+    const droppedNote =
+      (dropped > 0 ? ` ${dropped} outside your location filter.` : "") +
+      (deadRejects > 0 ? ` ${deadRejects} no longer live.` : "") +
+      (staleRejects > 0 ? ` ${staleRejects} older than your date filter.` : "");
     if (acc.length > 0) {
       setMatchCount(acc.length);
       setPhase("revealing");
@@ -617,7 +667,7 @@ export function ExploreProvider({ children }: { children: React.ReactNode }) {
       setScannerMissing(sawScannerMissing);
       setPhase("failed");
     } else {
-      setStatus(dropped > 0 ? `No candidates in range.${droppedNote}` : "");
+      setStatus(dropped > 0 || deadRejects > 0 || staleRejects > 0 ? `No candidates in range.${droppedNote}` : "");
       setPhase("empty-loose");
     }
   }, []);

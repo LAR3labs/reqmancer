@@ -32,6 +32,7 @@
 
 import { DEFAULT_USER_AGENT } from './user-agent.mjs';
 import { parseWwrFeed } from './providers/weworkremotely.mjs';
+import { postedAtFromDetail } from './providers/workday.mjs';
 
 const TIMEOUT_MS = 8_000;
 // Strict path-segment charset. Anything with a slash, dot-dot, or other char is
@@ -171,6 +172,17 @@ const ATS_PROVIDERS = [
     },
     api: ({ tenant, shard, site, jobPath }) =>
       `https://${tenant}.${shard}.myworkdayjobs.com/wday/cxs/${tenant}/${site}/job/${jobPath}`,
+    async interpret(res) {
+      let detail;
+      try { detail = await res.json(); } catch { detail = null; }
+      const postedAt = postedAtFromDetail(detail);
+      return {
+        result: 'active',
+        code: 'workday_api_ok',
+        reason: 'ATS API returns the posting (live)',
+        ...(postedAt === undefined ? {} : { postedAt: new Date(postedAt).toISOString().slice(0, 10) }),
+      };
+    },
   },
   {
     id: 'smartrecruiters',

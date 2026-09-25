@@ -99,6 +99,12 @@ const CALL_SITES = [
     args: [],
     probe: 'none',
   },
+  {
+    source: 'web/src/lib/core/liveness.ts',
+    script: null,
+    args: [],
+    probe: 'none',
+  },
 ];
 
 /**
