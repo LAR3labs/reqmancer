@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import type { DiscoveredOffer } from "./scan";
@@ -50,7 +51,7 @@ function cleanOffers(offers: DiscoveredOffer[]) {
 }
 
 export function addOffersToPipeline(offers: DiscoveredOffer[]): Promise<AddResult> {
-  return runCoreWriter(offers, `appendToPipeline(offers); appendToScanHistory(offers, date, "added");`);
+  return runCoreWriter(offers, "added");
 }
 
 /**
@@ -62,10 +63,10 @@ export function addOffersToPipeline(offers: DiscoveredOffer[]): Promise<AddResul
  * cluttering the pipeline page. Append-only, same canonical writer as Add.
  */
 export function dismissOffers(offers: DiscoveredOffer[]): Promise<AddResult> {
-  return runCoreWriter(offers, `appendToScanHistory(offers, date, "dismissed");`);
+  return runCoreWriter(offers, "dismissed");
 }
 
-function runCoreWriter(offers: DiscoveredOffer[], writeStmts: string): Promise<AddResult> {
+function runCoreWriter(offers: DiscoveredOffer[], status: "added" | "dismissed"): Promise<AddResult> {
   const clean = cleanOffers(offers);
   if (clean.length === 0) return Promise.resolve({ added: 0 });
 
@@ -76,16 +77,27 @@ function runCoreWriter(offers: DiscoveredOffer[], writeStmts: string): Promise<A
   }
 
   const scanUrl = pathToFileURL(rootScript("scan")).href;
+  const localTodayUrl = pathToFileURL(path.join(careerOpsRoot(), "lib", "local-today.mjs")).href;
   const code = `
 import { appendToPipeline, appendToScanHistory } from ${JSON.stringify(scanUrl)};
+import { localToday } from ${JSON.stringify(localTodayUrl)};
 let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (d) => { input += d; });
-process.stdin.on("end", () => {
+process.stdin.on("end", async () => {
   try {
     const offers = JSON.parse(input);
-    const date = new Date().toISOString().slice(0, 10);
-    ${writeStmts}
+    // LOCAL calendar day, not the UTC one — west of Greenwich, an evening
+    // add would otherwise stamp scan-history.tsv's first_seen a day ahead,
+    // opening scan.mjs's recheck/cooldown gate a day late for this row (#3070).
+    const date = localToday();
+    if (${JSON.stringify(status)} === "dismissed") {
+      // "Not interested": scan-history only, never data/pipeline.md.
+      await appendToScanHistory(offers, date, "dismissed");
+    } else {
+      await appendToPipeline(offers);
+      await appendToScanHistory(offers, date, "added");
+    }
     process.stdout.write(JSON.stringify({ added: offers.length }));
   } catch (e) {
     process.stdout.write(JSON.stringify({ added: 0, error: String((e && e.message) || e) }));

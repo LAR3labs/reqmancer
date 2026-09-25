@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import path from "node:path";
+import * as yaml from "js-yaml";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import { writeTempPortals, cleanupTempPortals } from "./portals";
+import { resolveScanTimeoutMs, scanTimeoutMessage } from "./scan-timeout.mjs";
 import { ATS_SOURCES, type DiscoveredOffer, type ExploreFilters, type ScanEvent } from "@/lib/explore";
 
 export type { DiscoveredOffer, ScanEvent, AtsSource } from "@/lib/explore";
@@ -77,6 +80,7 @@ type ScanJson = {
   postingsKept?: number;
   postingsDroppedNoDate?: number;
   unreachableBoards?: number;
+  stoppedEarly?: boolean;
   offers?: JsonOffer[];
 };
 
@@ -167,11 +171,18 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
     });
     child.on("close", () => {
       clearTimeout(killer);
+      // stdout carries one JSON object per line: upstream's
+      // careerops.scan.receipt@1 plus our portal-scan/v1. Pick ours by schema
+      // rather than parsing the whole buffer as a single object.
       let j: PortalScanJson | null = null;
-      try {
-        j = JSON.parse(jsonOut.trim()) as PortalScanJson;
-      } catch {
-        j = null;
+      for (const line of jsonOut.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line) as PortalScanJson;
+          if (parsed?.schema === "portal-scan/v1") j = parsed;
+        } catch {
+          /* not a JSON line — skip */
+        }
       }
       if (j?.schema === "portal-scan/v1" && Array.isArray(j.offers)) {
         for (const o of j.offers) {
@@ -212,6 +223,18 @@ export function runPortalScan(filters: ExploreFilters, onEvent: (e: ScanEvent) =
   });
 }
 
+// Scan budget (ms) from config/profile.yml `scan.timeout_seconds` — the same
+// place `scan.extractor` lives. Never throws: a missing/malformed profile keeps
+// the default (a broken config must not block scanning).
+function readScanTimeoutMs(): number {
+  try {
+    const parsed = yaml.load(fs.readFileSync(path.join(careerOpsRoot(), "config", "profile.yml"), "utf8"));
+    return resolveScanTimeoutMs(parsed);
+  } catch {
+    return resolveScanTimeoutMs(undefined);
+  }
+}
+
 export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) => void): Promise<DiscoveredOffer[]> {
   return new Promise((resolve) => {
     const tempPortals = writeTempPortals(filters);
@@ -244,13 +267,31 @@ export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) =>
     let errBuf = "";
     let jsonOut = ""; // --json mode: the single stdout object accumulates here
 
+    // A broad ATS sweep can legitimately outlast the default budget (the scanner
+    // probes every company in a source, not just --limit of them). Extend it in
+    // config/profile.yml via scan.timeout_seconds. If our own timer fires, remember
+    // it so the close handler can say so honestly (and the scanner flushes the
+    // matches found so far as a partial --json result on SIGTERM).
+    const timeoutMs = readScanTimeoutMs();
+    let timedOut = false;
+    let hardKiller: ReturnType<typeof setTimeout> | undefined;
     const killer = setTimeout(() => {
+      timedOut = true;
       try {
         child.kill("SIGTERM");
       } catch {
         /* ignore */
       }
-    }, 230_000);
+      // Grace period: if the child can't flush its partial JSON and exit, force it
+      // so a wedged scan can't hold the request open to the route's maxDuration.
+      hardKiller = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* ignore */
+        }
+      }, 5_000);
+    }, timeoutMs);
 
     // Live progress (atsStart / progress / atsDone) — in --json mode these human
     // lines arrive on STDERR; in legacy mode on STDOUT (handled inside handleLine).
@@ -348,12 +389,14 @@ export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) =>
 
     child.on("error", (e) => {
       clearTimeout(killer);
+      if (hardKiller) clearTimeout(hardKiller);
       cleanupTempPortals(tempPortals);
       onEvent({ kind: "error", message: e instanceof Error ? e.message : "scanner failed to start" });
       resolve(offers);
     });
     child.on("close", () => {
       clearTimeout(killer);
+      if (hardKiller) clearTimeout(hardKiller);
       cleanupTempPortals(tempPortals);
       if (useJson) {
         let j: ScanJson | null = null;
@@ -391,15 +434,28 @@ export function runDiscovery(filters: ExploreFilters, onEvent: (e: ScanEvent) =>
             datasetStatus: j.datasetStatus,
             postingsDroppedNoDate: j.postingsDroppedNoDate,
           });
+          // Stopped before finishing (our budget, or the scanner self-limited): the
+          // offers above are what it found so far — surface WHY without discarding them.
+          if (timedOut || j.stoppedEarly) {
+            const found = offers.length ? ` Showing the ${offers.length} match${offers.length === 1 ? "" : "es"} found so far.` : "";
+            onEvent({ kind: "error", message: scanTimeoutMessage(timeoutMs) + found });
+          }
         } else {
-          // --json requested but stdout didn't parse — surface honestly rather than
-          // silently returning 0 (defensive; shouldn't happen once the probe passed).
-          onEvent({ kind: "error", message: "The scanner returned no readable output." });
+          // No parseable JSON. Either our timer stopped the scanner before it could
+          // emit its single stdout object (a full sweep outran the budget), or —
+          // defensively — the probe passed yet stdout still didn't parse. Say which.
+          onEvent({
+            kind: "error",
+            message: timedOut ? scanTimeoutMessage(timeoutMs) : "The scanner returned no readable output.",
+          });
         }
         resolve(offers);
         return;
       }
       if (outBuf.trim()) handleLine(outBuf);
+      // Legacy mode streams offers as they arrive, so any collected so far are
+      // returned; still tell the user the run was cut short if our timer fired.
+      if (timedOut) onEvent({ kind: "error", message: scanTimeoutMessage(timeoutMs) });
       resolve(offers);
     });
   });

@@ -21,6 +21,7 @@ export type ExploreFilters = {
   negative: string[];
   allow: string[];
   block: string[];
+  blockHard: string[];
   alwaysAllow: string[];
   /** Accept a location that is ONLY the word "Remote" — no city, country, or
    *  region. Mirrors portals.yml `location_filter.allow_bare_remote` and
@@ -41,6 +42,7 @@ export const DEFAULT_FILTERS: ExploreFilters = {
   negative: [],
   allow: [],
   block: [],
+  blockHard: [],
   alwaysAllow: [],
   allowBareRemote: false,
   sinceDays: 7,
@@ -192,6 +194,7 @@ export function parseExplorePatch(
     ["negative", "negative"],
     ["allow", "allow"],
     ["block", "block"],
+    ["blockHard", "blockHard"],
     ["alwaysAllow", "alwaysAllow"],
   ];
   for (const [field, key] of lists) {
@@ -221,6 +224,7 @@ export function filtersToParams(f: ExploreFilters): string {
   if (f.negative.length) sp.set("not", f.negative.join(","));
   if (f.allow.length) sp.set("loc", f.allow.join(","));
   if (f.block.length) sp.set("noloc", f.block.join(","));
+  if (f.blockHard.length) sp.set("hardno", f.blockHard.join(","));
   if (f.alwaysAllow.length) sp.set("home", f.alwaysAllow.join(","));
   if (f.sinceDays !== DEFAULT_FILTERS.sinceDays) sp.set("since", String(f.sinceDays));
   if (f.ats.length !== ATS_SOURCES.length) sp.set("ats", f.ats.join(","));
@@ -243,6 +247,7 @@ export function paramsToFilters(sp: URLSearchParams, base: ExploreFilters = DEFA
       negative: split(sp.get("not")),
       allow: split(sp.get("loc")),
       block: split(sp.get("noloc")),
+      blockHard: split(sp.get("hardno")),
       alwaysAllow: split(sp.get("home")),
       since: sp.get("since") ?? undefined,
       ats: split(sp.get("ats")),

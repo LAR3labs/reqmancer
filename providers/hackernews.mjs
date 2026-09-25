@@ -4,8 +4,9 @@
 // Hacker News "Ask HN: Who is hiring?" provider — no auth required.
 //
 // Algorithm:
-//   1. Find the current monthly hiring thread via the Algolia HN search API
-//      (search_by_date, tags=story, query="Ask HN Who is hiring").
+//   1. Find the current monthly hiring thread via the Algolia HN search API,
+//      filtered to stories posted by the "whoishiring" account
+//      (tags=story,author_whoishiring) rather than a free-text query.
 //   2. Fetch the thread's item from the Algolia items API; top-level `children`
 //      are individual job posts left as top-level comments.
 //   3. Parse each comment: the first non-empty line is treated as the title/header
@@ -15,22 +16,18 @@
 //      format doesn't match the pipe-delimited convention).
 //
 // Wire in via a `job_boards:` entry with `provider: hackernews`.
-
-// Find the thread by AUTHOR, not by free-text query.
 //
-// The original URL was `tags=story&query=Ask HN Who is hiring&hitsPerPage=5`.
-// search_by_date sorts by recency and matches the query loosely, so the five
-// newest *loose* matches were things like "Ask HN: Who is dating?" and "Ask HN:
-// Is neuromorphic computing…" — the actual monthly thread was nowhere in the
-// window, and the provider threw "could not find thread" on every run.
-//
-// The monthly threads are always posted by the `whoishiring` bot account, so
-// tagging on the author makes the result set exactly the threads we want. Note
-// it posts TWO stories per month at the same timestamp ("Who is hiring?" and
-// "Who wants to be hired?"), so the title still has to be matched — see
-// resolveLatestThreadId.
+// NOTE: a free-text query ("Ask HN Who is hiring") against search_by_date used
+// to be the lookup here, but Algolia's free-text ranking can surface an
+// unrelated recent story that merely contains those words in its body — once
+// enough time passes since the monthly thread posted, a newer "Tell HN: ..."
+// post can outrank it in the top 5 date-sorted hits, and every one of them
+// fails the title regex below, so the provider throws "thread not found" even
+// though the actual thread is sitting a few pages back. Filtering by the
+// `whoishiring` account's own tag returns only its threads, so ordering by
+// date always surfaces the latest real one first.
 const SEARCH_URL =
-  'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10';
+  'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=5';
 
 /** @param {string} id */
 function itemUrl(id) {
@@ -46,18 +43,12 @@ function extractUrl(text) {
   return m ? m[0].replace(/[.,;!?)]+$/, '') : '';
 }
 
-// Named HTML entities we decode in comment bodies. Kept in single map
-/** @type {Record<string, string>} */
-const ENTITY_MAP = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#x27;': "'",
-  '&#39;': "'",
-  '&nbsp;': ' ',
-};
-const ENTITY_RE = /&amp;|&lt;|&gt;|&quot;|&#x27;|&#39;|&nbsp;/g;
+// Shared decoder instead of a local map (#2487, #2921). The local ENTITY_RE
+// was a literal alternation of seven forms, so it decoded &#39; but left every
+// OTHER numeric entity (&#8211;, &#232;, &#x2013;) and every other named one
+// (&uuml;, &eacute;) sitting in the title — where an undecoded entity does not
+// just look wrong, it fails the user's title_filter and the posting is dropped.
+import { decodeEntities } from './_html-entities.mjs';
 
 /**
  * Parse a single HN comment text into a normalized job object.
@@ -79,11 +70,10 @@ export function parseHnComment(text, threadUrl = '') {
   // Strip HTML. Anchors: keep the href value in place so URL extraction works.
   // Block-level tags (<p>, <br>, <div>, <li>, headings) become newlines so that
   // body paragraphs never bleed into the first header line after the join.
-  const plain = text
+  const plain = decodeEntities(text
     .replace(/<a\s[^>]*href="([^"]+)"[^>]*>.*?<\/a>/gi, (_, href) => href)
     .replace(/<\/?(?:p|br|div|li|h[1-6])\b[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(ENTITY_RE, (m) => ENTITY_MAP[m])
+    .replace(/<[^>]+>/g, ' '))
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n');
 

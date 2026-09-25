@@ -21,7 +21,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       # Un PR de firma cambia SOLO SIGNATURES.md. Si el PR toca más ficheros
       # (p.ej. un merge de upstream que arrastra SIGNATURES.md), no es un PR
@@ -76,7 +76,11 @@ jobs:
           ' 2> /tmp/reason.txt || { cat /tmp/reason.txt >> "$GITHUB_OUTPUT"; exit 1; }
       - name: Friendly ack (valid)
         if: success() && steps.detect.outputs.signature == 'true'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        # Fork PRs carry a read-only token, so this comment can fail with
+        # 'Resource not accessible by integration'. The comment is cosmetic:
+        # its failure must never turn a VALID signature's check red.
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const login = context.payload.pull_request.user.login;
@@ -86,7 +90,8 @@ jobs:
             });
       - name: Friendly fix-it (invalid)
         if: failure() && steps.detect.outputs.signature == 'true' && steps.check.outcome == 'failure'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # La razón pasa como DATO (env), nunca interpolada en el código JS.
           REASON: ${{ steps.check.outputs.reason || 'the diff shape or line format is off' }}

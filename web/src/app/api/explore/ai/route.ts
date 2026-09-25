@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const knownBlock = lines.length ? `\n\n--- ALREADY KNOWN (dedup — do NOT propose these) ---\n${lines.join("\n")}` : "";
   const prompt = `${mode}${OUTPUT_CONTRACT}${memoryLine}${knownBlock}\n\n--- USER INTENT ---\n${query}\n`;
 
-  const result = streamCliPrompt({ prompt, cliId });
+  const result = await streamCliPrompt({ prompt, cliId });
   if (result.kind === "error") return Response.json(result.body, { status: result.status });
   return result.response;
 }
