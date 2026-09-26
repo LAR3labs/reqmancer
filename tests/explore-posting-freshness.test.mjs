@@ -35,6 +35,8 @@ test('Workday liveness result includes the detail API start date', async () => {
   assert.equal(api?.ats, 'workday');
   const verdict = await api.interpret(new Response(JSON.stringify({ jobPostingInfo: { startDate: '2026-08-14' } })));
   assert.equal(verdict?.postedAt, '2026-08-14');
+  const offset = await api.interpret(new Response(JSON.stringify({ jobPostingInfo: { startDate: '2026-09-18T23:30:00-05:00' } })));
+  assert.equal(offset?.postedAt, '2026-09-18');
   const undated = await api.interpret(new Response(JSON.stringify({ jobPostingInfo: {} })));
   assert.equal(undated?.postedAt, undefined);
 });

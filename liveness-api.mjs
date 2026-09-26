@@ -180,7 +180,9 @@ const ATS_PROVIDERS = [
         result: 'active',
         code: 'workday_api_ok',
         reason: 'ATS API returns the posting (live)',
-        ...(postedAt === undefined ? {} : { postedAt: new Date(postedAt).toISOString().slice(0, 10) }),
+        // Preserve the date Workday declared. Converting an offset timestamp to
+        // UTC can move a late posting to the next calendar day.
+        ...(postedAt === undefined ? {} : { postedAt: detail.jobPostingInfo.startDate.trim().slice(0, 10) }),
       };
     },
   },
