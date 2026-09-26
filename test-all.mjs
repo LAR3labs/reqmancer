@@ -9142,6 +9142,7 @@ try {
     const e2eTmp = mkdtempSync(join(tmpdir(), 'co-cadence-e2e-'));
     try {
       copyFileSync(join(ROOT, 'followup-cadence.mjs'), join(e2eTmp, 'followup-cadence.mjs'));
+      copyFileSync(join(ROOT, 'yaml-compat.mjs'), join(e2eTmp, 'yaml-compat.mjs'));
       copyFileSync(join(ROOT, 'tracker-parse.mjs'), join(e2eTmp, 'tracker-parse.mjs'));
       copyFileSync(join(ROOT, 'tracker-aliases.json'), join(e2eTmp, 'tracker-aliases.json'));
       // followup-cadence now derives its status aliases from templates/states.yml

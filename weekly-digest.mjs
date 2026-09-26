@@ -40,7 +40,7 @@
 import { readFileSync, existsSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 // Only validateFlags: this module keeps its own flagValue (see below), so
 // importing the shared one too would shadow it.

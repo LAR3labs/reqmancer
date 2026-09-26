@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import * as yaml from "js-yaml";
+import * as yaml from "../yaml-compat.mjs";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { DEFAULT_FILTERS, cleanFilterList, type ExploreFilters } from "@/lib/explore";
 import { profileTargetKeywords } from "@/lib/profile-keywords.mjs";

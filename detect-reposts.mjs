@@ -62,7 +62,7 @@ import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 // Namespace import, not default: js-yaml 5.x drops the default export, and
 // #2656 migrated the rest of the repo for exactly that reason.
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';

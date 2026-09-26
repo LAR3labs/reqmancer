@@ -73,7 +73,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { resolveColumns, parseTrackerRow, normalizeTextKey } from './tracker-parse.mjs';
 import { asciiFold } from './lib/ascii-fold.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';

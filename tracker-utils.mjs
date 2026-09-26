@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, renameSync, rmSync, mkdirSync, statSync, l
 import { join, dirname, basename, resolve, relative, isAbsolute, sep } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { tmpdir } from 'os';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 // One definition for both locks: this module and pipeline-lock.mjs implement
 // the same directory-lock protocol on purpose, and #2777 showed how the two
 // copies drift — pipeline-lock learned that Windows answers mkdir/rm with

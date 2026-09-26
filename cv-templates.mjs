@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import * as yaml from 'js-yaml';
+import * as yaml from '../yaml-compat.mjs';
 import { isMainModule } from '../lib/is-main-module.mjs';
 
 /**

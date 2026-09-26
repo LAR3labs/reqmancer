@@ -313,6 +313,7 @@ const SYSTEM_PATHS = [
   'data-static/',
   'seeds/',
   'tests/',
+  'yaml-compat.mjs',
   'user-agent.mjs',
   'doctor.mjs',
   'jsonc-parse.mjs',

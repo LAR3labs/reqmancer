@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import * as yaml from "js-yaml";
+import * as yaml from "../yaml-compat.mjs";
 import { careerOpsRoot, rootScript } from "@/lib/career-ops";
 import { writeTempPortals, cleanupTempPortals } from "./portals";
 import { resolveScanTimeoutMs, scanTimeoutMessage } from "./scan-timeout.mjs";

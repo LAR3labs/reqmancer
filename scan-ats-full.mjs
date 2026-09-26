@@ -44,7 +44,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, unlinkSync } from 'fs';
 import { createHash } from 'crypto';
 import path from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { renameSyncWithRetry } from './tracker-utils.mjs';
 
 import { makeHttpCtx, fetchJson } from './providers/_http.mjs';

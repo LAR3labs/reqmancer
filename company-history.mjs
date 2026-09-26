@@ -51,7 +51,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { tmpdir } from 'os';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 import { parseScanHistory, detectReposts, loadAggregatorCompanies, isKeyLookup } from './detect-reposts.mjs';
 import { normalizeCompanyName } from './invite-match.mjs';

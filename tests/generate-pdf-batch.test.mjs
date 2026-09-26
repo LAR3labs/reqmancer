@@ -45,6 +45,7 @@ writeFileSync(join(sandbox, 'data', 'pdf-index.tsv'), '', 'utf-8');
 
 copyFileSync(join(ROOT, 'generate-pdf.mjs'), script);
 copyFileSync(join(ROOT, 'theme-style.mjs'), join(sandbox, 'theme-style.mjs'));
+copyFileSync(join(ROOT, 'yaml-compat.mjs'), join(sandbox, 'yaml-compat.mjs'));
 copyFileSync(join(ROOT, 'tracker-utils.mjs'), join(sandbox, 'tracker-utils.mjs'));
 copyFileSync(join(ROOT, 'tracker-parse.mjs'), join(sandbox, 'tracker-parse.mjs'));
 copyFileSync(join(ROOT, 'tracker-aliases.json'), join(sandbox, 'tracker-aliases.json'));

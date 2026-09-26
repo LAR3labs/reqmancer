@@ -1,4 +1,4 @@
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 
 const DEFAULT_OUTPUT_LANGUAGE = 'en';
 

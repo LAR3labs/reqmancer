@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import * as yaml from "js-yaml";
+import * as yaml from "./yaml-compat.mjs";
 
 /**
  * A configuration error that lets the route distinguish a broken user-layer

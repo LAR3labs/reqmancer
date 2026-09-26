@@ -22,7 +22,7 @@ import { validateFlags } from './lib/cli-flags.mjs';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { normalizeStatus, analyzeFromContent } from './followup-cadence.mjs';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';

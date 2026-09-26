@@ -45,7 +45,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { LIVENESS_CONTEXT_OPTIONS, rejectPrivateOrInvalid } from './liveness-browser.mjs';
 import { launchStealthBrowser, newStealthContext } from './browser-launch.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';

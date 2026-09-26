@@ -20,7 +20,7 @@
 import { chromium } from 'playwright';
 import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { appendToPipeline, appendToScanHistory, loadSeenUrls, PORTALS_PATH, SCAN_HISTORY_PATH } from './scan.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { localToday } from './lib/local-today.mjs';

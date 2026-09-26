@@ -25,7 +25,7 @@
 import { readFileSync, existsSync, statSync, realpathSync, writeFileSync, symlinkSync, rmSync } from 'fs';
 import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { load as yamlLoad } from 'js-yaml';
+import { load as yamlLoad } from './yaml-compat.mjs';
 import { resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
 import { validateFlags } from './lib/cli-flags.mjs';
 

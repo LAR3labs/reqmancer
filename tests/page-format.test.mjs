@@ -248,6 +248,7 @@ function coverSandbox() {
   for (const f of ['generate-cover-letter.mjs', 'verify-cv-facts.mjs', 'cv-templates.mjs', 'path-resolver.mjs']) {
     copyFileSync(join(ROOT, f), join(dir, f));
   }
+  copyFileSync(join(ROOT, 'yaml-compat.mjs'), join(dir, 'yaml-compat.mjs'));
   copyFileSync(join(ROOT, 'lib', 'is-main-module.mjs'), join(dir, 'lib', 'is-main-module.mjs'));
   // The resolver is here so a cover letter that starts calling it fails on the
   // assertion below and not on a missing module. Resolving early is the quiet

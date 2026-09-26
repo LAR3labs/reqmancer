@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import * as yaml from "js-yaml";
+import * as yaml from "../yaml-compat.mjs";
 import { careerOpsRoot } from "@/lib/career-ops";
 import { CANONICAL_STATES } from "@/lib/format";
 

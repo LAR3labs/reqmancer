@@ -40,7 +40,7 @@ import { createHash } from 'crypto';
 import { dirname, resolve, join, basename } from 'path';
 import { pathToFileURL, fileURLToPath } from 'url';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import {
   resolveColumns, detectColumns, isHeaderRow, isSeparatorRow, LEGACY_COLMAP,
 } from './tracker-parse.mjs';

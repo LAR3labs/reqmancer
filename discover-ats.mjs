@@ -34,7 +34,7 @@
 import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import * as yaml from 'js-yaml';
+import * as yaml from './yaml-compat.mjs';
 import { renameSyncWithRetry } from './tracker-utils.mjs';
 
 import { makeHttpCtx, isRefusedRedirectError } from './providers/_http.mjs';

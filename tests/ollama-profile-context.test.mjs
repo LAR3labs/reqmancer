@@ -23,6 +23,7 @@ const copyIntoFixture = (relativePath) => {
 for (const relativePath of [
   'ollama-eval.mjs',
   'profile-language.mjs',
+  'yaml-compat.mjs',
   'reserve-report-num.mjs',
   'tracker-aliases.json',
   'tracker-parse.mjs',
