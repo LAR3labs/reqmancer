@@ -153,7 +153,7 @@ const VALID_THROUGH_GRACE_MS = 24 * 60 * 60 * 1000;
  * @param {unknown} blocks - textContent of each script[type="application/ld+json"]
  * @returns {string}
  */
-export function jobPostingValidThrough(blocks) {
+function jobPostingField(blocks, field) {
   if (!Array.isArray(blocks)) return '';
   const isJobPosting = (node) => {
     const type = node?.['@type'];
@@ -172,12 +172,30 @@ export function jobPostingValidThrough(blocks) {
       const node = queue.shift();
       if (!node || typeof node !== 'object') continue;
       if (Array.isArray(node['@graph'])) queue.push(...node['@graph']);
-      if (isJobPosting(node) && typeof node.validThrough === 'string' && node.validThrough.trim()) {
-        return node.validThrough.trim();
+      if (isJobPosting(node) && typeof node[field] === 'string' && node[field].trim()) {
+        return node[field].trim();
       }
     }
   }
   return '';
+}
+
+export function jobPostingValidThrough(blocks) {
+  return jobPostingField(blocks, 'validThrough');
+}
+
+export function jobPostingDatePosted(blocks) {
+  const raw = jobPostingField(blocks, 'datePosted');
+  // Use the date declared by the posting. Converting an offsetless date-time
+  // through the scanner's local timezone can move it to another calendar day.
+  const shape = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(raw);
+  if (!shape) return '';
+  const [, year, month, day, hour, minute, second] = shape;
+  const calendar = new Date(0);
+  calendar.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
+  if (calendar.getUTCFullYear() !== Number(year) || calendar.getUTCMonth() !== Number(month) - 1 || calendar.getUTCDate() !== Number(day)) return '';
+  if (hour !== undefined && (Number(hour) > 23 || Number(minute) > 59 || (second !== undefined && Number(second) > 59))) return '';
+  return Number.isFinite(Date.parse(raw)) ? `${year}-${month}-${day}` : '';
 }
 
 // A job-detail URL almost always carries the posting's identity: a numeric req id

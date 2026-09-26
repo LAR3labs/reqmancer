@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink, Plus, Check, Loader2, ShieldQuestion, Sparkles, Coins, X } from "lucide-react";
+import { ExternalLink, Plus, Check, Loader2, ShieldQuestion, ShieldCheck, Sparkles, Coins, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { instrumentSerif } from "@/lib/fonts";
 import { ATS_LABEL, type AtsSource, type DiscoveredOffer } from "@/lib/explore";
@@ -56,7 +56,7 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
   const isAdding = adding.has(offer.url);
   const isDismissing = dismissing.has(offer.url);
   const unverified = offer.verification === "unconfirmed";
-  const fresh = freshness(offer.postedAt) || offer.postedHint || "";
+  const fresh = freshness(offer.postedAt);
 
   const evaluate = () => {
     addToPipeline([offer]); // evaluating implies it's in the pipeline — record it
@@ -104,9 +104,14 @@ export function DiscoveryCard({ offer, inPipeline, evaluatedN }: { offer: Discov
         {unverified && (
           <span
             className="inline-flex items-center gap-1 rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-300"
-            title="Found by AI on the public web — we can't confirm it's still live without opening it. Evaluating runs a real browser check and sets the verdict."
+            title="The posting could not be confirmed. Check it before applying."
           >
             <ShieldQuestion className="size-3" /> unverified
+          </span>
+        )}
+        {offer.verification === "active" && (
+          <span className="inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
+            <ShieldCheck className="size-3" /> live when checked
           </span>
         )}
         {offer.matchedKeyword && (
